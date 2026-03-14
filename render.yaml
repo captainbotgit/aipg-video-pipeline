@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: aipg-video-pipeline
+    runtime: node
+    plan: standard
+    buildCommand: |
+      npm install
+      apt-get update && apt-get install -y chromium ffmpeg
+    startCommand: npm run server
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3100
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/chromium
+      - key: REMOTION_CHROME_EXECUTABLE
+        value: /usr/bin/chromium
+    healthCheckPath: /health
+    disk:
+      name: video-output
+      mountPath: /opt/render/project/src/out
+      sizeGB: 10
