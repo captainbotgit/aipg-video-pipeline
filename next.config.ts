@@ -6,15 +6,31 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "@remotion/renderer",
     "@remotion/bundler",
-    "@remotion/compositor-linux-x64",
+    "@remotion/compositor-linux-x64-gnu",
+    "@remotion/compositor-linux-x64-musl",
     "@remotion/compositor-darwin-arm64",
     "@remotion/compositor-darwin-x64",
     "ffmpeg-static",
     "fluent-ffmpeg",
   ],
-  // Allow large API responses (video files streamed via Vercel Blob)
   experimental: {
     serverMinification: false,
+    // Force NFT to include Remotion's platform-specific compositor binaries.
+    // Remotion loads them dynamically at runtime via a platform detection
+    // require() that NFT cannot statically trace.
+    outputFileTracingIncludes: {
+      "/api/render": [
+        "./node_modules/@remotion/compositor-linux-x64-gnu/**",
+        "./node_modules/@remotion/compositor-linux-x64-musl/**",
+        "./node_modules/@remotion/renderer/**",
+        "./node_modules/remotion/**",
+        "./node_modules/@remotion/bundler/**",
+      ],
+      "/api/ffmpeg/process": [
+        "./node_modules/ffmpeg-static/**",
+        "./node_modules/fluent-ffmpeg/**",
+      ],
+    },
   },
   /**
    * Remotion bundle assets: the bundle is at /public/bundle/ but index.html
