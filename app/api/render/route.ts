@@ -49,6 +49,31 @@ function getChromiumExecutable(): Promise<string> {
 export const maxDuration = 300;
 export const runtime = "nodejs";
 
+// ─── Compositor Binary Selection ─────────────────────────────────────────────
+//
+// Remotion's platform detection picks @remotion/compositor-linux-x64-gnu on
+// Linux, but that binary is dynamically linked against GLIBC_2.35 which is not
+// present in Vercel's Lambda runtime (Amazon Linux 2).  The MUSL variant is
+// statically linked with no GLIBC version dependency.  We force MUSL by
+// passing `binariesDirectory` to renderMedia so Remotion skips its own
+// platform detection and loads the binary from the MUSL package directory.
+//
+// On macOS (local dev) this block is skipped; Remotion selects the darwin
+// binary automatically via its normal platform detection path.
+function getMuslBinariesDir(): string | undefined {
+  if (process.platform !== "linux") return undefined;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return (require("@remotion/compositor-linux-x64-musl") as { dir: string })
+      .dir;
+  } catch {
+    // MUSL package absent — fall back to Remotion's default detection.
+    return undefined;
+  }
+}
+
+const MUSL_BINARIES_DIR = getMuslBinariesDir();
+
 // ─── Bundle URL Resolution ────────────────────────────────────────────────────
 
 function getBundleUrl(req: NextRequest): string {
@@ -150,6 +175,9 @@ export async function POST(req: NextRequest) {
       inputProps,
       browserExecutable,
       chromiumOptions: CHROMIUM_OPTIONS,
+      // Force MUSL compositor on Linux to avoid GLIBC_2.35 requirement.
+      // On macOS MUSL_BINARIES_DIR is undefined so Remotion uses its default.
+      ...(MUSL_BINARIES_DIR ? { binariesDirectory: MUSL_BINARIES_DIR } : {}),
       onProgress: async ({ progress }) => {
         await writeStatus(jobId, {
           jobId,
