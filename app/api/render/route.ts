@@ -33,6 +33,18 @@ const CHROMIUM_OPTIONS = {
   headless: true,
 } as const;
 
+// Module-level promise so concurrent cold-start requests on the same instance
+// wait for the first extraction to finish rather than all racing to write the
+// Chrome binary simultaneously (which causes "spawn ETXTBSY").
+let chromiumExecutablePromise: Promise<string> | null = null;
+
+function getChromiumExecutable(): Promise<string> {
+  if (!chromiumExecutablePromise) {
+    chromiumExecutablePromise = chromium.executablePath(CHROMIUM_BINARY_URL);
+  }
+  return chromiumExecutablePromise;
+}
+
 // Vercel Fluid Compute — allow up to 5 minutes for renders
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -116,7 +128,9 @@ export async function POST(req: NextRequest) {
     // Resolve a Chromium binary that works in the Vercel serverless environment.
     // /tmp is writable (Vercel Fluid Compute); subsequent warm-start invocations
     // will find the binary already extracted there and skip the download.
-    const browserExecutable = await chromium.executablePath(CHROMIUM_BINARY_URL);
+    // getChromiumExecutable() deduplicates concurrent extraction via a module-level
+    // promise so parallel requests don't race to write the same binary (ETXTBSY).
+    const browserExecutable = await getChromiumExecutable();
 
     // Select composition (validates compositionId + resolves duration)
     const composition = await selectComposition({
