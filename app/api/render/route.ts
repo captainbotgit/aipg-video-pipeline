@@ -44,9 +44,13 @@ function getBundleUrl(req: NextRequest): string {
   if (process.env.RENDER_BUNDLE_URL) {
     return process.env.RENDER_BUNDLE_URL;
   }
-  // Vercel deployment URL (available at runtime).
-  // Point to /bundle/index.html explicitly so Next.js static serving
-  // returns the file and rewrites handle root-relative /bundle.js, /N.bundle.js etc.
+  // Prefer the stable production URL (VERCEL_PROJECT_PRODUCTION_URL, e.g.
+  // "aipg-video-pipeline.vercel.app"). VERCEL_URL is the per-deployment hash URL
+  // which may trigger Vercel's authentication wall in Chrome.
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/bundle/index.html`;
+  }
+  // Fallback: per-deployment URL (OK if Deployment Protection is disabled)
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}/bundle/index.html`;
   }
