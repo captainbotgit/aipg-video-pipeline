@@ -15,22 +15,24 @@ const nextConfig: NextConfig = {
   ],
   experimental: {
     serverMinification: false,
-    // Force NFT to include Remotion's platform-specific compositor binaries.
-    // Remotion loads them dynamically at runtime via a platform detection
-    // require() that NFT cannot statically trace.
-    outputFileTracingIncludes: {
-      "/api/render": [
-        "./node_modules/@remotion/compositor-linux-x64-gnu/**",
-        "./node_modules/@remotion/compositor-linux-x64-musl/**",
-        "./node_modules/@remotion/renderer/**",
-        "./node_modules/remotion/**",
-        "./node_modules/@remotion/bundler/**",
-      ],
-      "/api/ffmpeg/process": [
-        "./node_modules/ffmpeg-static/**",
-        "./node_modules/fluent-ffmpeg/**",
-      ],
-    },
+  },
+  // Force NFT to include Remotion's platform-specific compositor binaries.
+  // Remotion loads them dynamically at runtime via a platform detection
+  // require() that NFT cannot statically trace.
+  // Note: In Next.js 15.5+ this moved from experimental.outputFileTracingIncludes
+  // to a top-level outputFileTracingIncludes key.
+  outputFileTracingIncludes: {
+    "/api/render": [
+      "./node_modules/@remotion/compositor-linux-x64-gnu/**",
+      "./node_modules/@remotion/compositor-linux-x64-musl/**",
+      "./node_modules/@remotion/renderer/**",
+      "./node_modules/remotion/**",
+      "./node_modules/@remotion/bundler/**",
+    ],
+    "/api/ffmpeg/process": [
+      "./node_modules/ffmpeg-static/**",
+      "./node_modules/fluent-ffmpeg/**",
+    ],
   },
   /**
    * Remotion bundle assets: the bundle is at /public/bundle/ but index.html
