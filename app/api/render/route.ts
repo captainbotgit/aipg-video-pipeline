@@ -62,19 +62,53 @@ export const runtime = "nodejs";
 // binary automatically via its normal platform detection path.
 function getMuslBinariesDir(): string | undefined {
   if (process.platform !== "linux") return undefined;
+
+  // Try multiple resolution strategies — the first one whose directory
+  // actually contains the `remotion` binary wins.  We need to physically
+  // verify the binary exists because require.resolve can fail silently in
+  // Next.js ESM contexts, and outputFileTracingIncludes traces FILES but
+  // doesn't guarantee Node.js package resolution works for that path.
+  const candidates: string[] = [];
+
+  // 1. Standard Node.js package resolution (works when pkg is properly installed)
   try {
-    // Resolve the package's package.json to get a reliable path, then derive
-    // the directory from it. This avoids executing the package's main module
-    // (which requires a native binary) and works even if require() would fail.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pkgJson = require.resolve(
       "@remotion/compositor-linux-x64-musl/package.json"
     );
-    return path.dirname(pkgJson);
+    candidates.push(path.dirname(pkgJson));
   } catch {
-    // MUSL package absent — fall back to Remotion's default detection.
-    return undefined;
+    /* resolution failed — try fallbacks */
   }
+
+  // 2. Vercel Lambda task root (the function bundle lives at /var/task)
+  candidates.push(
+    path.join(
+      process.env.LAMBDA_TASK_ROOT ?? "/var/task",
+      "node_modules/@remotion/compositor-linux-x64-musl"
+    )
+  );
+
+  // 3. Relative to process.cwd() (works in some serverless runtimes)
+  candidates.push(
+    path.join(
+      process.cwd(),
+      "node_modules/@remotion/compositor-linux-x64-musl"
+    )
+  );
+
+  for (const dir of candidates) {
+    try {
+      // Remotion appends "/remotion" to binariesDirectory — verify it exists.
+      if (fs.existsSync(path.join(dir, "remotion"))) {
+        return dir;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return undefined;
 }
 
 const MUSL_BINARIES_DIR = getMuslBinariesDir();
