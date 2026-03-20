@@ -17,6 +17,21 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { randomUUID } from "crypto";
+import chromium from "@sparticuz/chromium-min";
+
+// Chromium binary for serverless environments.
+// Vercel's function bundle is read-only (/var/task), so Remotion cannot download
+// Chrome into node_modules/.remotion. We provide our own binary via @sparticuz/chromium-min
+// which downloads to /tmp (writable) on first invocation and caches for warm starts.
+const CHROMIUM_BINARY_URL =
+  process.env.CHROMIUM_BINARY_URL ||
+  "https://github.com/Sparticuz/chromium/releases/download/v143.0.4/chromium-v143.0.4-pack.x64.tar";
+
+const CHROMIUM_OPTIONS = {
+  disableWebSecurity: false,
+  enableMultiProcessOnLinux: true,
+  headless: true,
+} as const;
 
 // Vercel Fluid Compute — allow up to 5 minutes for renders
 export const maxDuration = 300;
@@ -94,11 +109,18 @@ export async function POST(req: NextRequest) {
   const tmpPath = path.join(os.tmpdir(), `render-${jobId}.mp4`);
 
   try {
+    // Resolve a Chromium binary that works in the Vercel serverless environment.
+    // /tmp is writable (Vercel Fluid Compute); subsequent warm-start invocations
+    // will find the binary already extracted there and skip the download.
+    const browserExecutable = await chromium.executablePath(CHROMIUM_BINARY_URL);
+
     // Select composition (validates compositionId + resolves duration)
     const composition = await selectComposition({
       serveUrl: bundleUrl,
       id: compositionId,
       inputProps,
+      browserExecutable,
+      chromiumOptions: CHROMIUM_OPTIONS,
     });
 
     // Render to /tmp
@@ -108,6 +130,8 @@ export async function POST(req: NextRequest) {
       codec: "h264",
       outputLocation: tmpPath,
       inputProps,
+      browserExecutable,
+      chromiumOptions: CHROMIUM_OPTIONS,
       onProgress: async ({ progress }) => {
         await writeStatus(jobId, {
           jobId,
