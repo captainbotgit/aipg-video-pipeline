@@ -63,9 +63,14 @@ export const runtime = "nodejs";
 function getMuslBinariesDir(): string | undefined {
   if (process.platform !== "linux") return undefined;
   try {
+    // Resolve the package's package.json to get a reliable path, then derive
+    // the directory from it. This avoids executing the package's main module
+    // (which requires a native binary) and works even if require() would fail.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return (require("@remotion/compositor-linux-x64-musl") as { dir: string })
-      .dir;
+    const pkgJson = require.resolve(
+      "@remotion/compositor-linux-x64-musl/package.json"
+    );
+    return path.dirname(pkgJson);
   } catch {
     // MUSL package absent — fall back to Remotion's default detection.
     return undefined;
