@@ -1,0 +1,15 @@
+# Build artifacts
+node_modules/
+build/
+.next/
+
+# Source maps (not needed for CDN serving)
+public/bundle/*.map
+
+# Sample/test videos (only for local Remotion Studio preview)
+# Production videos come via Vercel Blob URLs in inputProps
+public/*.mp4
+public/*.webm
+
+# Dev/test files
+*.tsbuildinfo
