@@ -51,67 +51,91 @@ export const runtime = "nodejs";
 
 // ─── Compositor Binary Selection ─────────────────────────────────────────────
 //
-// Remotion's platform detection picks @remotion/compositor-linux-x64-gnu on
-// Linux, but that binary is dynamically linked against GLIBC_2.35 which is not
-// present in Vercel's Lambda runtime (Amazon Linux 2).  The MUSL variant is
-// statically linked with no GLIBC version dependency.  We force MUSL by
-// passing `binariesDirectory` to renderMedia so Remotion skips its own
-// platform detection and loads the binary from the MUSL package directory.
+// Problem: Remotion auto-selects @remotion/compositor-linux-x64-gnu on Linux,
+// but that binary requires GLIBC_2.35 which is absent from Vercel's runtime.
 //
-// On macOS (local dev) this block is skipped; Remotion selects the darwin
-// binary automatically via its normal platform detection path.
-function getMuslBinariesDir(): string | undefined {
-  if (process.platform !== "linux") return undefined;
+// Solution: Build a combined /tmp directory containing:
+//   • remotion  — from the MUSL package (statically linked, no GLIBC constraint)
+//   • ffmpeg    — from the GNU package (bundled static build, no GLIBC_2.35 need)
+//   • ffprobe   — from the GNU package (same)
+// Then pass that directory as `binariesDirectory` to renderMedia, which causes
+// Remotion to skip its own platform detection and use our pre-built mix.
+//
+// The prep runs once per function instance; warm-start requests skip the copy.
+// On macOS the function returns undefined and Remotion uses its darwin binary.
 
-  // Try multiple resolution strategies — the first one whose directory
-  // actually contains the `remotion` binary wins.  We need to physically
-  // verify the binary exists because require.resolve can fail silently in
-  // Next.js ESM contexts, and outputFileTracingIncludes traces FILES but
-  // doesn't guarantee Node.js package resolution works for that path.
-  const candidates: string[] = [];
+const COMBINED_BIN_DIR = path.join(os.tmpdir(), "remotion-compositor-musl");
 
-  // 1. Standard Node.js package resolution (works when pkg is properly installed)
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pkgJson = require.resolve(
-      "@remotion/compositor-linux-x64-musl/package.json"
-    );
-    candidates.push(path.dirname(pkgJson));
-  } catch {
-    /* resolution failed — try fallbacks */
-  }
-
-  // 2. Vercel Lambda task root (the function bundle lives at /var/task)
-  candidates.push(
-    path.join(
-      process.env.LAMBDA_TASK_ROOT ?? "/var/task",
-      "node_modules/@remotion/compositor-linux-x64-musl"
-    )
-  );
-
-  // 3. Relative to process.cwd() (works in some serverless runtimes)
-  candidates.push(
-    path.join(
-      process.cwd(),
-      "node_modules/@remotion/compositor-linux-x64-musl"
-    )
-  );
-
-  for (const dir of candidates) {
+function findInCandidates(dirs: string[], file: string): string | null {
+  for (const dir of dirs) {
+    const p = path.join(dir, file);
     try {
-      // Remotion appends "/remotion" to binariesDirectory — verify it exists.
-      if (fs.existsSync(path.join(dir, "remotion"))) {
-        return dir;
-      }
+      if (fs.existsSync(p)) return p;
     } catch {
       /* ignore */
     }
   }
-
-  return undefined;
+  return null;
 }
 
-const MUSL_BINARIES_DIR = getMuslBinariesDir();
+function pkgDirs(pkgName: string): string[] {
+  const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
+  return [
+    path.join(taskRoot, "node_modules", pkgName),
+    path.join(process.cwd(), "node_modules", pkgName),
+  ];
+}
+
+async function prepareCombinedBinariesDir(): Promise<string | undefined> {
+  if (process.platform !== "linux") return undefined;
+
+  // Warm start: already assembled on this instance.
+  if (fs.existsSync(path.join(COMBINED_BIN_DIR, "remotion"))) {
+    return COMBINED_BIN_DIR;
+  }
+
+  const muslCompositor = findInCandidates(
+    pkgDirs("@remotion/compositor-linux-x64-musl"),
+    "remotion"
+  );
+  if (!muslCompositor) {
+    console.warn("[render] MUSL compositor binary not found; GLIBC error likely");
+    return undefined;
+  }
+
+  const gnuDirs = pkgDirs("@remotion/compositor-linux-x64-gnu");
+  const gnuFfmpeg = findInCandidates(gnuDirs, "ffmpeg");
+  const gnuFfprobe = findInCandidates(gnuDirs, "ffprobe");
+
+  fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
+
+  // MUSL remotion (no GLIBC_2.35 requirement)
+  fs.copyFileSync(muslCompositor, path.join(COMBINED_BIN_DIR, "remotion"));
+  fs.chmodSync(path.join(COMBINED_BIN_DIR, "remotion"), 0o755);
+
+  // GNU ffmpeg / ffprobe — bundled as static builds, no GLIBC_2.35 dependency
+  for (const [src, name] of [
+    [gnuFfmpeg, "ffmpeg"],
+    [gnuFfprobe, "ffprobe"],
+  ] as [string | null, string][]) {
+    if (src) {
+      fs.copyFileSync(src, path.join(COMBINED_BIN_DIR, name));
+      fs.chmodSync(path.join(COMBINED_BIN_DIR, name), 0o755);
+    }
+  }
+
+  return COMBINED_BIN_DIR;
+}
+
+// Module-level promise — deduplicates concurrent cold-start preparations.
+let combinedBinDirPromise: Promise<string | undefined> | null = null;
+
+function getCombinedBinariesDir(): Promise<string | undefined> {
+  if (!combinedBinDirPromise) {
+    combinedBinDirPromise = prepareCombinedBinariesDir();
+  }
+  return combinedBinDirPromise;
+}
 
 // ─── Bundle URL Resolution ────────────────────────────────────────────────────
 
@@ -194,7 +218,10 @@ export async function POST(req: NextRequest) {
     // will find the binary already extracted there and skip the download.
     // getChromiumExecutable() deduplicates concurrent extraction via a module-level
     // promise so parallel requests don't race to write the same binary (ETXTBSY).
-    const browserExecutable = await getChromiumExecutable();
+    const [browserExecutable, binariesDirectory] = await Promise.all([
+      getChromiumExecutable(),
+      getCombinedBinariesDir(),
+    ]);
 
     // Select composition (validates compositionId + resolves duration)
     const composition = await selectComposition({
@@ -214,9 +241,9 @@ export async function POST(req: NextRequest) {
       inputProps,
       browserExecutable,
       chromiumOptions: CHROMIUM_OPTIONS,
-      // Force MUSL compositor on Linux to avoid GLIBC_2.35 requirement.
-      // On macOS MUSL_BINARIES_DIR is undefined so Remotion uses its default.
-      ...(MUSL_BINARIES_DIR ? { binariesDirectory: MUSL_BINARIES_DIR } : {}),
+      // Combined bin dir: MUSL compositor + GNU ffmpeg/ffprobe.
+      // undefined on macOS → Remotion uses its darwin binary automatically.
+      ...(binariesDirectory ? { binariesDirectory } : {}),
       onProgress: async ({ progress }) => {
         await writeStatus(jobId, {
           jobId,
