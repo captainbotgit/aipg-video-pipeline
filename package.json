@@ -1,27 +1,38 @@
 {
   "name": "aipg-video-pipeline",
-  "version": "1.0.0",
-  "description": "Premium UGC video production pipeline for dental marketing — captions.ai quality",
+  "version": "2.0.0",
+  "description": "Unified Remotion video pipeline for dental marketing — Vercel Sandbox rendering",
   "scripts": {
-    "start": "npx remotion studio",
-    "build": "npx remotion render",
-    "server": "tsx server.ts",
-    "dev": "tsx watch server.ts"
+    "dev": "next dev",
+    "build": "bun run bundle && next build",
+    "start": "next start",
+    "bundle": "bunx remotion bundle src/index.ts && bun run bundle:sync",
+    "bundle:sync": "rm -rf public/bundle && cp -r build public/bundle && find public/bundle/public -name '*.mp4' -delete 2>/dev/null; rm -rf public/bundle/public/bundle 2>/dev/null; find public/bundle -name '*.map' -delete 2>/dev/null; echo 'Bundle ready:'&& du -sh public/bundle",
+    "studio": "bunx remotion studio src/index.ts",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@remotion/bundler": "4.0.242",
-    "@remotion/cli": "4.0.242",
-    "@remotion/player": "4.0.242",
-    "@remotion/renderer": "4.0.242",
-    "express": "^4.21.0",
+    "next": "^15.1.0",
+    "@vercel/blob": "^0.27.0",
+    "remotion": "4.0.438",
+    "@remotion/bundler": "4.0.438",
+    "@remotion/renderer": "4.0.438",
+    "@remotion/cli": "4.0.438",
+    "@remotion/player": "4.0.438",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "remotion": "4.0.242",
-    "tsx": "^4.21.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "fluent-ffmpeg": "^2.1.3",
+    "ffmpeg-static": "^5.2.0"
+  },
+  "optionalDependencies": {
+    "@remotion/compositor-linux-x64": "4.0.438",
+    "@remotion/compositor-darwin-arm64": "4.0.438",
+    "@remotion/compositor-darwin-x64": "4.0.438"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/node": "^20.0.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "typescript": "^5.6.0"

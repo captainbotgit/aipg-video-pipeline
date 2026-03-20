@@ -1,8 +1,9 @@
 import React from "react";
 import {
   AbsoluteFill,
+  OffthreadVideo,
   Sequence,
-  Video,
+  staticFile,
   useVideoConfig,
 } from "remotion";
 import { z } from "zod";
@@ -25,6 +26,8 @@ export const DentalExplainer: React.FC<DentalExplainerProps> = ({
 }) => {
   const { fps, durationInFrames } = useVideoConfig();
 
+  const resolvedVideoUrl = videoUrl.startsWith("http") ? videoUrl : staticFile(videoUrl);
+
   const hookDuration = director.hook
     ? Math.round((director.hook.duration_seconds || 3) * fps)
     : 0;
@@ -46,8 +49,8 @@ export const DentalExplainer: React.FC<DentalExplainerProps> = ({
 
       {/* A-Roll base video — always playing underneath */}
       <AbsoluteFill>
-        <Video
-          src={videoUrl}
+        <OffthreadVideo
+          src={resolvedVideoUrl}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
       </AbsoluteFill>
@@ -68,8 +71,10 @@ export const DentalExplainer: React.FC<DentalExplainerProps> = ({
       {/* B-roll scene overlays */}
       {director.scenes.map((scene, idx) => {
         if (scene.type !== "b_roll") return null;
-        const brollUrl = scene.broll_url || brollUrls[idx];
-        if (!brollUrl) return null;
+        const rawBrollUrl = scene.broll_url || brollUrls[idx];
+        if (!rawBrollUrl) return null;
+
+        const resolvedBrollUrl = rawBrollUrl.startsWith("http") ? rawBrollUrl : staticFile(rawBrollUrl);
 
         const startFrame = Math.round(scene.start * fps);
         const endFrame = Math.round(scene.end * fps);
@@ -86,8 +91,8 @@ export const DentalExplainer: React.FC<DentalExplainerProps> = ({
               transitionOut={scene.transition_out || "crossfade"}
               totalDuration={sceneDuration}
             >
-              <Video
-                src={brollUrl}
+              <OffthreadVideo
+                src={resolvedBrollUrl}
                 style={{
                   width: "100%",
                   height: "100%",

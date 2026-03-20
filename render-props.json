@@ -1,0 +1,52 @@
+{
+  "brandKit": {
+    "practice_name": "Peachtree Pediatric Dentistry",
+    "primary_color": "#02FEEF",
+    "secondary_color": "#B55DFD",
+    "accent_color": "#FF6B6B",
+    "background_color": "#0A0A0F",
+    "font_primary": "Clash Display",
+    "font_secondary": "Inter",
+    "cta_text": "Book Your Child's Visit"
+  },
+  "videoUrl": "test-video.mp4",
+  "words": [
+    { "word": "Did", "start": 0.5, "end": 0.7 },
+    { "word": "you", "start": 0.7, "end": 0.85 },
+    { "word": "know", "start": 0.85, "end": 1.1 },
+    { "word": "that", "start": 1.1, "end": 1.3 },
+    { "word": "sealants", "start": 1.3, "end": 1.8 },
+    { "word": "can", "start": 1.85, "end": 2.0 },
+    { "word": "prevent", "start": 2.0, "end": 2.4 },
+    { "word": "up", "start": 2.45, "end": 2.6 },
+    { "word": "to", "start": 2.6, "end": 2.7 },
+    { "word": "80%", "start": 2.7, "end": 3.1 },
+    { "word": "of", "start": 3.15, "end": 3.3 },
+    { "word": "cavities", "start": 3.3, "end": 3.8 },
+    { "word": "in", "start": 3.85, "end": 4.0 },
+    { "word": "children", "start": 4.0, "end": 4.5 }
+  ],
+  "director": {
+    "hook": {
+      "text": "This Changes Everything",
+      "duration_seconds": 3,
+      "style": "bold_animated"
+    },
+    "scenes": [
+      {
+        "start": 0,
+        "end": 15,
+        "type": "a_roll",
+        "caption_emphasis": ["sealants", "80%", "cavities"],
+        "broll_prompt": null,
+        "transition_in": "fade"
+      }
+    ],
+    "cta": {
+      "text": "Book Your Child's Visit",
+      "placement": "end_card",
+      "duration_seconds": 3
+    }
+  },
+  "brollUrls": {}
+}

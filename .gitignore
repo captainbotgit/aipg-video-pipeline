@@ -1,8 +1,24 @@
 node_modules/
 dist/
 out/
-*.mp4
-*.webm
 .DS_Store
 .env
 .env.local
+
+# Next.js build output
+.next/
+
+# Remotion intermediate build (synced to public/bundle by bundle:sync script)
+build/
+
+# Source map files (generated but not needed for production serving)
+public/bundle/*.map
+
+# Rendered video output (stored in Vercel Blob, not git)
+*.mp4
+*.webm
+
+# OS
+.DS_Store
+Thumbs.db
+.vercel

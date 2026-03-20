@@ -2,11 +2,12 @@ import React from "react";
 import {
   AbsoluteFill,
   Sequence,
-  Video,
+  OffthreadVideo,
   useCurrentFrame,
   useVideoConfig,
   interpolate,
   spring,
+  staticFile,
 } from "remotion";
 import { z } from "zod";
 import { AnimatedCaption } from "../components/AnimatedCaption";
@@ -33,14 +34,18 @@ export const QuickTip: React.FC<QuickTipProps> = ({
   const ctaDuration = Math.round(3 * fps);
   const ctaStart = durationInFrames - ctaDuration;
 
+  const resolvedVideoUrl = videoUrl.startsWith("http")
+    ? videoUrl
+    : staticFile(videoUrl);
+
   return (
     <AbsoluteFill style={{ backgroundColor: brandKit.background_color }}>
       <style>{FONT_CSS}</style>
 
       {/* Speaker video with branded frame */}
       <AbsoluteFill>
-        <Video
-          src={videoUrl}
+        <OffthreadVideo
+          src={resolvedVideoUrl}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
         {/* Branded border glow */}

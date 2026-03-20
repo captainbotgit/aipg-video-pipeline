@@ -1,0 +1,8 @@
+{
+  "framework": "nextjs",
+  "installCommand": "bun install",
+  "buildCommand": "bun run build",
+  "env": {
+    "RENDER_BUNDLE_URL": "@render_bundle_url"
+  }
+}

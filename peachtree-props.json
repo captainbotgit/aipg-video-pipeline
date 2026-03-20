@@ -1,0 +1,219 @@
+{
+  "brandKit": {
+    "practice_name": "Peachtree Pediatric Dentistry",
+    "primary_color": "#02FEEF",
+    "secondary_color": "#B55DFD",
+    "accent_color": "#FF6B6B",
+    "background_color": "#0A0A0F",
+    "font_primary": "Clash Display",
+    "font_secondary": "Inter",
+    "cta_text": "Book Your Child's Visit"
+  },
+  "videoUrl": "test-video.mp4",
+  "words": [
+    {"word": "Oh", "start": 0.0, "end": 0.2},
+    {"word": "no,", "start": 0.2, "end": 0.4},
+    {"word": "your", "start": 0.4, "end": 0.6},
+    {"word": "child", "start": 0.6, "end": 0.9},
+    {"word": "knocked", "start": 0.9, "end": 1.2},
+    {"word": "out", "start": 1.2, "end": 1.5},
+    {"word": "a", "start": 1.5, "end": 1.6},
+    {"word": "permanent", "start": 1.6, "end": 2.1},
+    {"word": "tooth?", "start": 2.1, "end": 2.5},
+    {"word": "What", "start": 2.5, "end": 2.8},
+    {"word": "do", "start": 2.8, "end": 3.0},
+    {"word": "you", "start": 3.0, "end": 3.2},
+    {"word": "do?", "start": 3.2, "end": 3.5},
+
+    {"word": "The", "start": 5.0, "end": 5.2},
+    {"word": "first", "start": 5.2, "end": 5.5},
+    {"word": "thing", "start": 5.5, "end": 5.7},
+    {"word": "you", "start": 5.7, "end": 5.9},
+    {"word": "need", "start": 5.9, "end": 6.1},
+    {"word": "to", "start": 6.1, "end": 6.2},
+    {"word": "do", "start": 6.2, "end": 6.4},
+    {"word": "is", "start": 6.4, "end": 6.6},
+    {"word": "call", "start": 6.6, "end": 6.9},
+    {"word": "your", "start": 6.9, "end": 7.1},
+    {"word": "pediatric", "start": 7.1, "end": 7.6},
+    {"word": "dentist.", "start": 7.6, "end": 8.0},
+
+    {"word": "They", "start": 9.0, "end": 9.2},
+    {"word": "will", "start": 9.2, "end": 9.4},
+    {"word": "guide", "start": 9.4, "end": 9.7},
+    {"word": "you", "start": 9.7, "end": 9.9},
+    {"word": "through", "start": 9.9, "end": 10.2},
+    {"word": "the", "start": 10.2, "end": 10.4},
+    {"word": "next", "start": 10.4, "end": 10.7},
+    {"word": "steps.", "start": 10.7, "end": 11.2},
+
+    {"word": "In", "start": 13.0, "end": 13.2},
+    {"word": "some", "start": 13.2, "end": 13.5},
+    {"word": "cases,", "start": 13.5, "end": 13.9},
+    {"word": "the", "start": 13.9, "end": 14.1},
+    {"word": "tooth", "start": 14.1, "end": 14.5},
+    {"word": "can", "start": 14.5, "end": 14.7},
+    {"word": "be", "start": 14.7, "end": 14.9},
+    {"word": "re-implanted", "start": 14.9, "end": 15.6},
+    {"word": "into", "start": 15.6, "end": 15.9},
+    {"word": "the", "start": 15.9, "end": 16.0},
+    {"word": "socket.", "start": 16.0, "end": 16.5},
+
+    {"word": "If", "start": 19.0, "end": 19.2},
+    {"word": "you're", "start": 19.2, "end": 19.5},
+    {"word": "unable", "start": 19.5, "end": 19.9},
+    {"word": "to", "start": 19.9, "end": 20.0},
+    {"word": "put", "start": 20.0, "end": 20.2},
+    {"word": "it", "start": 20.2, "end": 20.3},
+    {"word": "back,", "start": 20.3, "end": 20.6},
+    {"word": "place", "start": 20.6, "end": 20.9},
+    {"word": "the", "start": 20.9, "end": 21.0},
+    {"word": "tooth", "start": 21.0, "end": 21.3},
+    {"word": "in", "start": 21.3, "end": 21.4},
+    {"word": "milk.", "start": 21.4, "end": 21.8},
+
+    {"word": "Make", "start": 23.0, "end": 23.3},
+    {"word": "your", "start": 23.3, "end": 23.5},
+    {"word": "way", "start": 23.5, "end": 23.7},
+    {"word": "to", "start": 23.7, "end": 23.8},
+    {"word": "the", "start": 23.8, "end": 23.9},
+    {"word": "dentist's", "start": 23.9, "end": 24.4},
+    {"word": "office", "start": 24.4, "end": 24.8},
+    {"word": "for", "start": 24.8, "end": 25.0},
+    {"word": "next", "start": 25.0, "end": 25.3},
+    {"word": "steps.", "start": 25.3, "end": 25.7},
+
+    {"word": "If", "start": 27.0, "end": 27.2},
+    {"word": "the", "start": 27.2, "end": 27.3},
+    {"word": "child", "start": 27.3, "end": 27.6},
+    {"word": "is", "start": 27.6, "end": 27.7},
+    {"word": "in", "start": 27.7, "end": 27.8},
+    {"word": "pain,", "start": 27.8, "end": 28.2},
+    {"word": "place", "start": 28.2, "end": 28.5},
+    {"word": "ice", "start": 28.5, "end": 28.8},
+    {"word": "on", "start": 28.8, "end": 29.0},
+    {"word": "the", "start": 29.0, "end": 29.1},
+    {"word": "area.", "start": 29.1, "end": 29.5},
+
+    {"word": "Take", "start": 30.5, "end": 30.8},
+    {"word": "over-the-counter", "start": 30.8, "end": 31.6},
+    {"word": "pain", "start": 31.6, "end": 31.9},
+    {"word": "medicine", "start": 31.9, "end": 32.4},
+    {"word": "if", "start": 32.4, "end": 32.6},
+    {"word": "necessary.", "start": 32.6, "end": 33.2},
+
+    {"word": "If", "start": 35.0, "end": 35.2},
+    {"word": "a", "start": 35.2, "end": 35.3},
+    {"word": "permanent", "start": 35.3, "end": 35.8},
+    {"word": "tooth", "start": 35.8, "end": 36.1},
+    {"word": "falls", "start": 36.1, "end": 36.4},
+    {"word": "out,", "start": 36.4, "end": 36.7},
+    {"word": "it", "start": 36.7, "end": 36.8},
+    {"word": "can", "start": 36.8, "end": 37.0},
+    {"word": "be", "start": 37.0, "end": 37.1},
+    {"word": "saved!", "start": 37.1, "end": 37.6},
+
+    {"word": "Act", "start": 39.0, "end": 39.3},
+    {"word": "quickly.", "start": 39.3, "end": 39.8},
+    {"word": "Call", "start": 39.8, "end": 40.1},
+    {"word": "your", "start": 40.1, "end": 40.3},
+    {"word": "pediatric", "start": 40.3, "end": 40.9},
+    {"word": "dentist", "start": 40.9, "end": 41.4},
+    {"word": "and", "start": 41.4, "end": 41.6},
+    {"word": "follow", "start": 41.6, "end": 41.9},
+    {"word": "their", "start": 41.9, "end": 42.1},
+    {"word": "steps.", "start": 42.1, "end": 42.5}
+  ],
+  "director": {
+    "hook": {
+      "text": "Knocked Out Tooth? Do This!",
+      "duration_seconds": 2,
+      "style": "bold_animated"
+    },
+    "scenes": [
+      {
+        "start": 0,
+        "end": 5,
+        "type": "a_roll",
+        "caption_emphasis": ["permanent", "tooth"],
+        "broll_prompt": null,
+        "transition_in": "fade"
+      },
+      {
+        "start": 5,
+        "end": 8.5,
+        "type": "a_roll",
+        "caption_emphasis": ["call", "pediatric", "dentist"],
+        "broll_prompt": null
+      },
+      {
+        "start": 8.5,
+        "end": 11.5,
+        "type": "b_roll",
+        "caption_emphasis": [],
+        "broll_url": "broll-calling-dentist.mp4",
+        "transition_in": "crossfade",
+        "transition_out": "crossfade"
+      },
+      {
+        "start": 11.5,
+        "end": 17,
+        "type": "a_roll",
+        "caption_emphasis": ["re-implanted", "socket"],
+        "broll_prompt": null
+      },
+      {
+        "start": 19,
+        "end": 22,
+        "type": "a_roll",
+        "caption_emphasis": ["milk"],
+        "broll_prompt": null
+      },
+      {
+        "start": 22,
+        "end": 25,
+        "type": "b_roll",
+        "caption_emphasis": [],
+        "broll_url": "broll-tooth-in-milk.mp4",
+        "transition_in": "crossfade",
+        "transition_out": "crossfade"
+      },
+      {
+        "start": 25,
+        "end": 29.5,
+        "type": "a_roll",
+        "caption_emphasis": ["pain", "ice"],
+        "broll_prompt": null
+      },
+      {
+        "start": 29.5,
+        "end": 33,
+        "type": "b_roll",
+        "caption_emphasis": [],
+        "broll_url": "broll-ice-pack.mp4",
+        "transition_in": "crossfade",
+        "transition_out": "crossfade"
+      },
+      {
+        "start": 33,
+        "end": 38,
+        "type": "a_roll",
+        "caption_emphasis": ["saved!"],
+        "broll_prompt": null
+      },
+      {
+        "start": 38,
+        "end": 43,
+        "type": "a_roll",
+        "caption_emphasis": ["Act", "quickly", "pediatric", "dentist"],
+        "broll_prompt": null
+      }
+    ],
+    "cta": {
+      "text": "Book Your Child's Visit",
+      "placement": "end_card",
+      "duration_seconds": 3
+    }
+  },
+  "brollUrls": {}
+}

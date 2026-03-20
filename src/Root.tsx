@@ -1,20 +1,35 @@
 import React from "react";
 import { Composition } from "remotion";
+
+// ── Original 4 compositions (A-Roll + Captions) ────────────────────────────
 import { DentalExplainer } from "./compositions/DentalExplainer";
 import { QuickTip } from "./compositions/QuickTip";
 import { BeforeAfter } from "./compositions/BeforeAfter";
 import { Testimonial } from "./compositions/Testimonial";
+
+// ── Migrated 4 compositions (Motion Graphics) ─────────────────────────────
+import { DidYouKnow } from "./compositions/DidYouKnow";
+import { PatientStory } from "./compositions/PatientStory";
+import { ProcedureSpotlight } from "./compositions/ProcedureSpotlight";
+import { BeforeAfterReveal } from "./compositions/BeforeAfterReveal";
+
 import { DEFAULT_BRAND_KIT } from "./utils/brandKit";
 import {
   DentalExplainerSchema,
   QuickTipSchema,
   BeforeAfterSchema,
   TestimonialSchema,
+  DidYouKnowSchema,
+  PatientStorySchema,
+  ProcedureSpotlightSchema,
+  BeforeAfterRevealSchema,
 } from "./utils/schemas";
 
 const FPS = 30;
 const WIDTH = 1080;
 const HEIGHT = 1920;
+
+// ── Shared sample data for Remotion Studio previews ────────────────────────
 
 const sampleWords = [
   { word: "Did", start: 0.5, end: 0.7 },
@@ -56,21 +71,29 @@ const sampleDirector = {
   },
 };
 
+const PLACEHOLDER_BEFORE =
+  "https://placehold.co/1080x1920/1a1a2e/ffffff?text=Before";
+const PLACEHOLDER_AFTER =
+  "https://placehold.co/1080x1920/0a0a0f/02FEEF?text=After";
+
+// ── Remotion Root ──────────────────────────────────────────────────────────
+
 export const RemotionRoot: React.FC = () => {
   return (
     <>
+      {/* ── Original 4: A-Roll + Captions ─────────────────────────────── */}
+
       <Composition
         id="DentalExplainer"
         component={DentalExplainer}
         schema={DentalExplainerSchema}
-        durationInFrames={30 * FPS}
+        durationInFrames={60 * FPS}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}
         defaultProps={{
           brandKit: DEFAULT_BRAND_KIT,
-          videoUrl:
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
+          videoUrl: "test-video.mp4",
           words: sampleWords,
           director: sampleDirector,
           brollUrls: {},
@@ -87,8 +110,7 @@ export const RemotionRoot: React.FC = () => {
         height={HEIGHT}
         defaultProps={{
           brandKit: DEFAULT_BRAND_KIT,
-          videoUrl:
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
+          videoUrl: "test-video.mp4",
           words: sampleWords,
           hookText: "3 Things Your Dentist Wants You to Know",
           tipNumber: 1,
@@ -105,10 +127,8 @@ export const RemotionRoot: React.FC = () => {
         height={HEIGHT}
         defaultProps={{
           brandKit: DEFAULT_BRAND_KIT,
-          beforeImageUrl:
-            "https://placehold.co/1080x1920/1a1a2e/ffffff?text=Before",
-          afterImageUrl:
-            "https://placehold.co/1080x1920/0a0a0f/02FEEF?text=After",
+          beforeImageUrl: PLACEHOLDER_BEFORE,
+          afterImageUrl: PLACEHOLDER_AFTER,
           patientQuote: "I can't believe the difference!",
           procedureName: "Teeth Whitening",
         }}
@@ -124,13 +144,92 @@ export const RemotionRoot: React.FC = () => {
         height={HEIGHT}
         defaultProps={{
           brandKit: DEFAULT_BRAND_KIT,
-          videoUrl:
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
+          videoUrl: "test-video.mp4",
           words: sampleWords,
           patientName: "Sarah M.",
-          quoteHighlight:
-            "Best dental experience my kids have ever had!",
+          quoteHighlight: "Best dental experience my kids have ever had!",
           starRating: 5,
+        }}
+      />
+
+      {/* ── Migrated 4: Motion Graphics (no video required) ───────────── */}
+
+      <Composition
+        id="DidYouKnow"
+        component={DidYouKnow}
+        schema={DidYouKnowSchema}
+        durationInFrames={30 * FPS}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+        defaultProps={{
+          brandKit: DEFAULT_BRAND_KIT,
+          hookText: "Did You Know?",
+          bullets: [
+            "Sealants prevent up to 80% of cavities in children",
+            "Most dental problems are entirely preventable",
+            "Regular cleanings save thousands in future costs",
+          ],
+          ctaText: "Book Your Free Consultation",
+        }}
+      />
+
+      <Composition
+        id="PatientStory"
+        component={PatientStory}
+        schema={PatientStorySchema}
+        durationInFrames={30 * FPS}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+        defaultProps={{
+          brandKit: DEFAULT_BRAND_KIT,
+          patientName: "Sarah M.",
+          location: "Atlanta, GA",
+          quote:
+            "I was terrified of the dentist for years. The team here completely changed my experience — I actually look forward to my visits now!",
+          rating: 5,
+          ctaText: "Book Your Consultation Today",
+        }}
+      />
+
+      <Composition
+        id="ProcedureSpotlight"
+        component={ProcedureSpotlight}
+        schema={ProcedureSpotlightSchema}
+        durationInFrames={30 * FPS}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+        defaultProps={{
+          brandKit: DEFAULT_BRAND_KIT,
+          procedureName: "Invisalign",
+          problem: "Crooked teeth affecting your confidence?",
+          benefits: [
+            "Nearly invisible aligners",
+            "Remove to eat & brush normally",
+            "Results in as little as 6 months",
+          ],
+          stat: "Over 14 million patients treated worldwide",
+          ctaText: "Get Your Free Smile Assessment",
+        }}
+      />
+
+      <Composition
+        id="BeforeAfterReveal"
+        component={BeforeAfterReveal}
+        schema={BeforeAfterRevealSchema}
+        durationInFrames={30 * FPS}
+        fps={FPS}
+        width={WIDTH}
+        height={HEIGHT}
+        defaultProps={{
+          brandKit: DEFAULT_BRAND_KIT,
+          beforeImage: PLACEHOLDER_BEFORE,
+          afterImage: PLACEHOLDER_AFTER,
+          resultText: "Complete smile transformation in just 3 visits",
+          quote: "I finally have the smile I always dreamed of",
+          ctaText: "Start Your Transformation",
         }}
       />
     </>
