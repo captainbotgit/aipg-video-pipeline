@@ -1,16 +1,25 @@
 /**
  * POST /api/render
  *
- * Renders a Remotion composition to MP4 using the pre-built public/bundle.
- * Stores the result in Vercel Blob and returns the public URL.
+ * Async render endpoint. Accepts a compositionId + inputProps, writes an
+ * initial "queued" status to Vercel Blob, and returns a jobId immediately.
+ * The actual render runs in the background via Next.js 15 `after()` so the
+ * HTTP connection is never held open for 10+ minutes.
  *
- * Body: { compositionId: string, inputProps: object }
- * Response: { success: boolean, videoUrl: string, url: string, jobId: string }
+ * Clients poll  GET /api/status/[jobId]  until status is "done" or "error".
+ * When done, the status JSON contains videoUrl pointing at the rendered MP4.
  *
- * Compatible with existing n8n Layer 3 webhook calls.
+ * Body:   { compositionId: string, inputProps: object, overrideDurationInFrames?: number }
+ * Returns: { success: true, jobId: string, compositionId: string, status: "queued", pollUrl: string }
+ *
+ * n8n Layer 3 compatibility note:
+ *   Old synchronous response shape included `videoUrl` and `url`.
+ *   New shape returns `jobId` + `pollUrl` — n8n workflows should poll
+ *   /api/status/{jobId} and extract videoUrl from the final status.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { put } from "@vercel/blob";
 import path from "path";
@@ -32,8 +41,6 @@ const CHROMIUM_OPTIONS = {
   // Single-process Chrome on Linux keeps the RAM footprint minimal.
   // Multi-process spawns separate GPU + zygote + renderer processes — at
   // 1080×1920 with OffthreadVideo this can exceed the 3 GB function limit.
-  // The V8 heap accumulation concern (for 1800-frame renders) is mitigated by
-  // concurrency: 1 already preventing parallel frame renders.
   enableMultiProcessOnLinux: false,
   headless: true,
   chromiumFlags: [
@@ -270,7 +277,7 @@ function cleanupTmp(outputPath: string, browserExecutable?: string) {
 
 // ─── Bundle URL Resolution ────────────────────────────────────────────────────
 
-function getBundleUrl(req: NextRequest): string {
+function getBundleUrl(host: string): string {
   // Explicit override (set in Vercel env: RENDER_BUNDLE_URL)
   if (process.env.RENDER_BUNDLE_URL) {
     return process.env.RENDER_BUNDLE_URL;
@@ -286,7 +293,6 @@ function getBundleUrl(req: NextRequest): string {
     return `https://${process.env.VERCEL_URL}/bundle/index.html`;
   }
   // Local dev fallback
-  const host = req.headers.get("host") || "localhost:3000";
   const protocol = host.startsWith("localhost") ? "http" : "https";
   return `${protocol}://${host}/bundle/index.html`;
 }
@@ -306,59 +312,27 @@ async function writeStatus(jobId: string, data: Record<string, unknown>) {
   }
 }
 
-// ─── Handler ─────────────────────────────────────────────────────────────────
+// ─── Core Render Logic ────────────────────────────────────────────────────────
 
-export async function POST(req: NextRequest) {
-  const jobId = randomUUID();
-  const startedAt = new Date().toISOString();
-
-  let body: {
-    compositionId?: string;
-    inputProps?: Record<string, unknown>;
-    // Optional: cap the render at N frames (for testing long compositions on
-    // constrained infrastructure). Not passed to Remotion's composition — only
-    // used to override durationInFrames before handing to renderMedia.
-    overrideDurationInFrames?: number;
-  };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { success: false, error: "Invalid JSON body" },
-      { status: 400 }
-    );
-  }
-
-  const { compositionId, inputProps = {}, overrideDurationInFrames } = body;
-
-  if (!compositionId) {
-    return NextResponse.json(
-      { success: false, error: "compositionId is required" },
-      { status: 400 }
-    );
-  }
-
-  const bundleUrl = getBundleUrl(req);
-
-  await writeStatus(jobId, {
-    jobId,
-    compositionId,
-    status: "rendering",
-    progress: 0,
-    startedAt,
-  });
-
+async function runRender({
+  jobId,
+  compositionId,
+  inputProps,
+  overrideDurationInFrames,
+  bundleUrl,
+  startedAt,
+}: {
+  jobId: string;
+  compositionId: string;
+  inputProps: Record<string, unknown>;
+  overrideDurationInFrames?: number;
+  bundleUrl: string;
+  startedAt: string;
+}) {
   const tmpPath = path.join(os.tmpdir(), `render-${jobId}.mp4`);
-
-  // Hoisted so the catch block can also pass it to cleanupTmp.
   let browserExecutable: string | undefined;
 
   try {
-    // Resolve a Chromium binary that works in the Vercel serverless environment.
-    // /tmp is writable (Vercel Fluid Compute); subsequent warm-start invocations
-    // will find the binary already extracted there and skip the download.
-    // getChromiumExecutable() deduplicates concurrent extraction via a module-level
-    // promise so parallel requests don't race to write the same binary (ETXTBSY).
     browserExecutable = await getChromiumExecutable();
     const binariesDirectory = getGnuBinariesDir();
 
@@ -383,6 +357,14 @@ export async function POST(req: NextRequest) {
       ? { ...compositionRaw, durationInFrames: overrideDurationInFrames }
       : compositionRaw;
 
+    await writeStatus(jobId, {
+      jobId,
+      compositionId,
+      status: "rendering",
+      progress: 0,
+      startedAt,
+    });
+
     // Render to /tmp
     await renderMedia({
       composition,
@@ -396,7 +378,7 @@ export async function POST(req: NextRequest) {
       // undefined on macOS → Remotion uses its darwin binary automatically.
       ...(binariesDirectory ? { binariesDirectory } : {}),
       // Single Chrome tab renders one frame at a time — avoids parallel decoding
-      // blowing through Vercel's 3 GB RAM cap on long OffthreadVideo compositions.
+      // blowing through Vercel's RAM cap on long OffthreadVideo compositions.
       concurrency: 1,
       // JPEG intermediate frames (vs PNG default) significantly reduce /tmp usage.
       // Vercel /tmp is capped at 512 MB; after Chromium extraction (~305 MB for
@@ -453,28 +435,18 @@ export async function POST(req: NextRequest) {
       status: "done",
       progress: 100,
       videoUrl: blob.url,
+      url: blob.url,
       startedAt,
       completedAt,
     });
 
-    // Return n8n-compatible response
-    return NextResponse.json({
-      success: true,
-      videoUrl: blob.url,
-      url: blob.url, // alias used by some n8n nodes
-      jobId,
-      compositionId,
-      startedAt,
-      completedAt,
-    });
+    console.log(`[render] done: ${compositionId} → ${blob.url}`);
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
 
     // Self-heal broken Chromium installations (missing .so files).
-    // Deletes /tmp/chromium + resets the extraction promise so the NEXT request
-    // triggers a full re-download and extraction of the Chromium pack.
     if (isBrokenChromiumError(error)) {
-      console.error(`[render] Broken Chromium detected — invalidating cache for next request. Error: ${error}`);
+      console.error(`[render] Broken Chromium detected — invalidating cache. Error: ${error}`);
       invalidateChromiumCache();
     }
 
@@ -490,9 +462,81 @@ export async function POST(req: NextRequest) {
       failedAt: new Date().toISOString(),
     });
 
+    console.error(`[render] failed: ${compositionId} — ${error}`);
+  }
+}
+
+// ─── Handler ─────────────────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  const jobId = randomUUID();
+  const startedAt = new Date().toISOString();
+
+  let body: {
+    compositionId?: string;
+    inputProps?: Record<string, unknown>;
+    // Optional: cap the render at N frames (for testing long compositions on
+    // constrained infrastructure). Not passed to Remotion's composition — only
+    // used to override durationInFrames before handing to renderMedia.
+    overrideDurationInFrames?: number;
+  };
+  try {
+    body = await req.json();
+  } catch {
     return NextResponse.json(
-      { success: false, error, jobId },
-      { status: 500 }
+      { success: false, error: "Invalid JSON body" },
+      { status: 400 }
     );
   }
+
+  const { compositionId, inputProps = {}, overrideDurationInFrames } = body;
+
+  if (!compositionId) {
+    return NextResponse.json(
+      { success: false, error: "compositionId is required" },
+      { status: 400 }
+    );
+  }
+
+  // Resolve bundle URL from the incoming request host (captures per-deployment URL).
+  const host = req.headers.get("host") || "localhost:3000";
+  const bundleUrl = getBundleUrl(host);
+
+  // Write initial status so polling clients see "queued" immediately.
+  await writeStatus(jobId, {
+    jobId,
+    compositionId,
+    status: "queued",
+    progress: 0,
+    startedAt,
+  });
+
+  // Schedule render to run AFTER the response is sent (Next.js 15 `after()`).
+  // This keeps the HTTP connection short — no more 10-minute hanging requests.
+  // The function continues running (up to maxDuration=800s) even after the
+  // client receives the response, then writes the final status to Vercel Blob.
+  after(async () => {
+    await runRender({
+      jobId,
+      compositionId,
+      inputProps,
+      overrideDurationInFrames,
+      bundleUrl,
+      startedAt,
+    });
+  });
+
+  // Return immediately — polling endpoint: GET /api/status/[jobId]
+  const origin = req.headers.get("x-forwarded-proto")
+    ? `${req.headers.get("x-forwarded-proto")}://${host}`
+    : `https://${host}`;
+
+  return NextResponse.json({
+    success: true,
+    jobId,
+    compositionId,
+    status: "queued",
+    startedAt,
+    pollUrl: `${origin}/api/status/${jobId}`,
+  });
 }
