@@ -66,18 +66,6 @@ export const runtime = "nodejs";
 
 const COMBINED_BIN_DIR = path.join(os.tmpdir(), "remotion-compositor-musl");
 
-function findInCandidates(dirs: string[], file: string): string | null {
-  for (const dir of dirs) {
-    const p = path.join(dir, file);
-    try {
-      if (fs.existsSync(p)) return p;
-    } catch {
-      /* ignore */
-    }
-  }
-  return null;
-}
-
 function pkgDirs(pkgName: string): string[] {
   const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
   return [
@@ -94,33 +82,32 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
     return COMBINED_BIN_DIR;
   }
 
-  const muslCompositor = findInCandidates(
-    pkgDirs("@remotion/compositor-linux-x64-musl"),
-    "remotion"
+  // Find the MUSL package directory — it ships remotion, ffmpeg, ffprobe AND
+  // all required .so shared libraries (libavcodec, libavdevice, etc.) as a
+  // self-contained bundle.  Copying everything to /tmp lets the binaries find
+  // their .so deps via $ORIGIN RPATH without needing system libraries.
+  const muslPkgDir = pkgDirs("@remotion/compositor-linux-x64-musl").find(
+    (d) => fs.existsSync(path.join(d, "remotion"))
   );
-  if (!muslCompositor) {
-    console.warn("[render] MUSL compositor binary not found; GLIBC error likely");
+
+  if (!muslPkgDir) {
+    console.warn("[render] MUSL compositor package not found; GLIBC error likely");
     return undefined;
   }
 
-  const gnuDirs = pkgDirs("@remotion/compositor-linux-x64-gnu");
-  const gnuFfmpeg = findInCandidates(gnuDirs, "ffmpeg");
-  const gnuFfprobe = findInCandidates(gnuDirs, "ffprobe");
-
   fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
 
-  // MUSL remotion (no GLIBC_2.35 requirement)
-  fs.copyFileSync(muslCompositor, path.join(COMBINED_BIN_DIR, "remotion"));
-  fs.chmodSync(path.join(COMBINED_BIN_DIR, "remotion"), 0o755);
-
-  // GNU ffmpeg / ffprobe — bundled as static builds, no GLIBC_2.35 dependency
-  for (const [src, name] of [
-    [gnuFfmpeg, "ffmpeg"],
-    [gnuFfprobe, "ffprobe"],
-  ] as [string | null, string][]) {
-    if (src) {
-      fs.copyFileSync(src, path.join(COMBINED_BIN_DIR, name));
-      fs.chmodSync(path.join(COMBINED_BIN_DIR, name), 0o755);
+  // Copy all files from the MUSL package (binaries + .so libs) to /tmp so the
+  // binaries can locate their shared libraries via relative RPATH ($ORIGIN).
+  for (const entry of fs.readdirSync(muslPkgDir)) {
+    const src = path.join(muslPkgDir, entry);
+    const dst = path.join(COMBINED_BIN_DIR, entry);
+    if (fs.statSync(src).isFile()) {
+      fs.copyFileSync(src, dst);
+      // Mark binaries and shared libs executable
+      if (!entry.endsWith(".js") && !entry.endsWith(".d.ts") && !entry.endsWith(".md")) {
+        fs.chmodSync(dst, 0o755);
+      }
     }
   }
 
