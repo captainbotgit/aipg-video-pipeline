@@ -49,13 +49,6 @@ const CHROMIUM_OPTIONS = {
 // Chrome binary simultaneously (which causes "spawn ETXTBSY").
 let chromiumExecutablePromise: Promise<string> | null = null;
 
-function getChromiumExecutable(): Promise<string> {
-  if (!chromiumExecutablePromise) {
-    chromiumExecutablePromise = chromium.executablePath(CHROMIUM_BINARY_URL);
-  }
-  return chromiumExecutablePromise;
-}
-
 // ─── Chromium Self-Healing ────────────────────────────────────────────────────
 //
 // @sparticuz/chromium-min extracts the Chrome binary AND companion shared
@@ -63,16 +56,21 @@ function getChromiumExecutable(): Promise<string> {
 // Its executablePath() checks only whether /tmp/chromium (the binary) exists;
 // if it does it returns immediately WITHOUT verifying the .so files.
 //
-// Problem: our cleanupTmp() (now dir-only) preserves all files, but a previous
-// buggy deploy wiped the .so files. On warm containers the binary exists but
-// the .so files are gone → "libnspr4.so: cannot open shared object file".
+// Problem: a previous buggy cleanupTmp() deleted loose .so files from /tmp,
+// leaving warm containers where /tmp/chromium exists but .so files are gone.
+// Every request fails with "libnspr4.so: cannot open shared object file".
 //
-// Fix: when any error matches known Chrome-launch failure patterns, wipe
-// /tmp/chromium (the binary) and reset the module-level promise. The NEXT
-// request will hit a null promise → call executablePath() → it sees no binary
-// → downloads and fully re-extracts the pack (binary + all .so libs).
+// Fix (proactive): before returning a cached path, verify that the binary
+// AND at least one critical .so file exist. If the .so is missing, delete the
+// binary and reset the promise so executablePath() fully re-extracts the pack
+// (binary + ALL .so libs) on the CURRENT request — not just the next one.
 //
-// The current request still fails (Chrome is broken), but the next one heals.
+// Fix (reactive): in the catch block, also detect Chrome-launch errors and
+// invalidate the cache so future requests on this container also self-heal.
+
+// A .so that Chrome requires and that is always present in chromium-min's pack.
+// Used as a proxy to detect a corrupted (partially-wiped) Chromium installation.
+const CHROMIUM_SENTINEL_SO = "libnspr4.so";
 
 const CHROME_BROKEN_PATTERNS = [
   "cannot open shared object file",
@@ -88,16 +86,31 @@ function isBrokenChromiumError(message: string): boolean {
 
 function invalidateChromiumCache(): void {
   chromiumExecutablePromise = null;
-  // Delete the binary so executablePath() re-extracts the full pack next time.
-  // Companion .so files in /tmp are NOT deleted here — if the binary is absent
-  // executablePath() re-extracts everything, overwriting stale .so files too.
   const binaryPath = path.join(os.tmpdir(), "chromium");
   try {
     if (fs.existsSync(binaryPath)) {
       fs.unlinkSync(binaryPath);
-      console.log("[render] Invalidated Chromium cache — will re-extract on next request");
+      console.log("[render] Invalidated Chromium cache — binary deleted, will re-extract");
     }
   } catch { /* ignore */ }
+}
+
+async function getChromiumExecutable(): Promise<string> {
+  // Proactive health check: if we have a cached path but the sentinel .so is
+  // missing, the Chromium installation is corrupted. Force full re-extraction.
+  if (chromiumExecutablePromise) {
+    const sentinelPath = path.join(os.tmpdir(), CHROMIUM_SENTINEL_SO);
+    const soMissing = !fs.existsSync(sentinelPath);
+    if (soMissing) {
+      console.warn(`[render] ${CHROMIUM_SENTINEL_SO} missing — Chromium installation corrupted, forcing re-extraction`);
+      invalidateChromiumCache();
+    }
+  }
+
+  if (!chromiumExecutablePromise) {
+    chromiumExecutablePromise = chromium.executablePath(CHROMIUM_BINARY_URL);
+  }
+  return chromiumExecutablePromise;
 }
 
 // Vercel Fluid Compute — allow up to 5 minutes for renders
