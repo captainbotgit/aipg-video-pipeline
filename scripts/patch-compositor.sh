@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 # patch-compositor.sh
 #
-# Clears the GLIBC_2.35 version requirement for the `hypot` symbol in the
-# Remotion GNU compositor binary using patchelf.
+# Marks the GLIBC_2.35 version requirement in the Remotion GNU compositor
+# binary as WEAK so glibc's runtime linker skips it on Vercel (AL2023, glibc 2.34).
 #
-# Why: Vercel's serverless runtime (Amazon Linux 2023, glibc 2.34) does not
-# provide the GLIBC_2.35 symbol version, so the compositor crashes before
-# rendering any video. patchelf --clear-symbol-version sets the symbol's
-# version index to 0 (unversioned), allowing glibc to satisfy it with
-# whatever hypot it provides.
+# Background:
+#   The compositor binary was compiled on Ubuntu 22.04 (glibc 2.35) and contains
+#   a Vernaux entry in .gnu.version_r requiring GLIBC_2.35 from libm.so.6 (for
+#   hypot). Vercel's runtime has glibc 2.34 which does not export GLIBC_2.35,
+#   causing the binary to refuse to load with "version 'GLIBC_2.35' not found".
 #
-# This script runs on Vercel's Linux build machine (via vercel-build in
-# package.json). It is a no-op on macOS / Windows.
+# Fix:
+#   Set vna_flags |= VER_FLG_WEAK (0x2) on the GLIBC_2.35 Vernaux entry.
+#   glibc's ld.so (dl-version.c) skips weak version requirements entirely —
+#   it only fails on required (non-weak) versions that are missing.
+#   The binary continues to call hypot normally via libm; only the version
+#   tag check is bypassed.
+#
+# This runs on Vercel's Linux build machine inside bun run build.
+# It is a no-op on macOS / Windows.
 
 set -euo pipefail
 
@@ -27,29 +34,49 @@ if [ ! -f "$COMPOSITOR" ]; then
   exit 0
 fi
 
-echo "[patch-compositor] Downloading patchelf 0.18.0 (static Linux x64)..."
-WORK_DIR=$(mktemp -d)
-trap 'rm -rf "$WORK_DIR"' EXIT
+echo "[patch-compositor] Patching GLIBC_2.35 → VER_FLG_WEAK in $COMPOSITOR ..."
 
-curl -fsSL \
-  "https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz" \
-  | tar -xz -C "$WORK_DIR"
+python3 - "$COMPOSITOR" <<'PYEOF'
+import sys, struct
 
-PATCHELF="$WORK_DIR/bin/patchelf"
-chmod +x "$PATCHELF"
+filename = sys.argv[1]
 
-echo "[patch-compositor] Patching: clearing hypot GLIBC_2.35 version requirement..."
-"$PATCHELF" --clear-symbol-version hypot "$COMPOSITOR"
-chmod +x "$COMPOSITOR"
+with open(filename, 'rb') as f:
+    data = bytearray(f.read())
 
-# Confirm GLIBC_2.35 is gone. objdump might not be available everywhere, so
-# we use readelf which is more widely available on minimal build images.
-if command -v readelf &>/dev/null; then
-  if readelf -V "$COMPOSITOR" 2>/dev/null | grep -q "GLIBC_2.35"; then
-    echo "[patch-compositor] WARNING: GLIBC_2.35 still found after patch!"
-  else
-    echo "[patch-compositor] Verified: GLIBC_2.35 no longer required."
-  fi
-fi
+# ELF hash of "GLIBC_2.35" (GNU hash algorithm, little-endian x64 binary)
+GLIBC_2_35_HASH_LE = struct.pack('<I', 0x069691b5)
+
+# Vernaux layout (little-endian):
+#   vna_hash  (4 bytes) — ELF hash of version string
+#   vna_flags (2 bytes) — VER_FLG_WEAK=0x2 makes this requirement optional
+#   vna_other (2 bytes) — version index
+#   vna_name  (4 bytes) — offset into .dynstr for version string
+#   vna_next  (4 bytes) — offset to next Vernaux (0 = last)
+VER_FLG_WEAK = 0x2
+
+patched = 0
+pos = 0
+while True:
+    idx = data.find(GLIBC_2_35_HASH_LE, pos)
+    if idx == -1:
+        break
+    flags_off = idx + 4  # vna_flags immediately follows vna_hash
+    old_flags = struct.unpack_from('<H', data, flags_off)[0]
+    new_flags = old_flags | VER_FLG_WEAK
+    struct.pack_into('<H', data, flags_off, new_flags)
+    print(f'  offset {idx:#010x}: vna_flags {old_flags:#06x} -> {new_flags:#06x}')
+    patched += 1
+    pos = idx + 1
+
+if patched == 0:
+    print('  GLIBC_2.35 hash not found — binary may already be patched or different.')
+    sys.exit(0)
+
+with open(filename, 'wb') as f:
+    f.write(data)
+
+print(f'  Patched {patched} Vernaux entry/entries. VER_FLG_WEAK set — runtime linker will skip GLIBC_2.35 check.')
+PYEOF
 
 echo "[patch-compositor] Done."
