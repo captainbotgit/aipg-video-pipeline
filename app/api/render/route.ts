@@ -29,14 +29,20 @@ const CHROMIUM_BINARY_URL =
 
 const CHROMIUM_OPTIONS = {
   disableWebSecurity: true,
-  // Multi-process Chrome: each renderer process has its own fresh V8 heap, which
-  // avoids accumulated GC pressure on long (60 s) DentalExplainer renders.
-  // Single-process packs everything into one heap that grows unbounded.
-  enableMultiProcessOnLinux: true,
+  // Single-process Chrome on Linux keeps the RAM footprint minimal.
+  // Multi-process spawns separate GPU + zygote + renderer processes — at
+  // 1080×1920 with OffthreadVideo this can exceed the 3 GB function limit.
+  // The V8 heap accumulation concern (for 1800-frame renders) is mitigated by
+  // concurrency: 1 already preventing parallel frame renders.
+  enableMultiProcessOnLinux: false,
   headless: true,
   chromiumFlags: [
     // Use /tmp instead of /dev/shm (Vercel restricts /dev/shm size)
     "--disable-dev-shm-usage",
+    // Disable GPU rendering — renders to software, saves GPU process RAM
+    "--disable-gpu",
+    // Prevent zygote helper process (multi-process only, but explicit is safe)
+    "--no-zygote",
     // Discard cached resources aggressively to free memory during long renders
     "--aggressive-cache-discard",
     // Reduce background timer throttling overhead
