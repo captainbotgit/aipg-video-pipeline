@@ -368,27 +368,6 @@ export async function POST(req: NextRequest) {
     // orphaned output MP4 files. Chromium's extracted files are preserved.
     cleanupTmp(tmpPath, browserExecutable);
 
-    // Diagnostic: log /tmp entry sizes after cleanup so we know exactly how
-    // much space is available before the render starts.
-    try {
-      const tmpDir = os.tmpdir();
-      const entries = fs.readdirSync(tmpDir).map((entry) => {
-        const fullPath = path.join(tmpDir, entry);
-        try {
-          const result = require("child_process").execSync(
-            `du -sh "${fullPath}" 2>/dev/null || echo "0\t${fullPath}"`,
-            { encoding: "utf8", timeout: 5000 }
-          ).trim();
-          return result;
-        } catch { return `? ${entry}`; }
-      });
-      const dfResult = require("child_process").execSync(
-        "df -h /tmp 2>/dev/null | tail -1",
-        { encoding: "utf8", timeout: 3000 }
-      ).trim();
-      console.log(`[render] /tmp after cleanup:\n  ${entries.join("\n  ")}\n  df: ${dfResult}`);
-    } catch { /* ignore diag errors */ }
-
     // Select composition (validates compositionId + resolves duration)
     const compositionRaw = await selectComposition({
       serveUrl: bundleUrl,
@@ -420,12 +399,15 @@ export async function POST(req: NextRequest) {
       // blowing through Vercel's 3 GB RAM cap on long OffthreadVideo compositions.
       concurrency: 1,
       // JPEG intermediate frames (vs PNG default) significantly reduce /tmp usage.
-      // Vercel /tmp is capped at 512 MB; after Chromium extraction (~250 MB) only
-      // ~262 MB remains for render artifacts. PNG frames at 1080×1920 can be
-      // 500 KB–2 MB each — JPEG compresses to ~50–150 KB (10–20× smaller).
-      // Trade-off: slight quality loss in intermediate frames, acceptable for
-      // video-over-video compositions where the final H.264 encode dominates.
+      // Vercel /tmp is capped at 512 MB; after Chromium extraction (~305 MB for
+      // binary + al2023 libs + fonts) only ~207 MB remains for render artifacts.
+      // PNG frames at 1080×1920 are 500 KB–2 MB each → 900 MB–3.6 GB for 1800
+      // frames, impossible. JPEG quality 80 → ~100–150 KB each → ~270 MB, still
+      // over budget. JPEG quality 30 → ~30–60 KB each → ~54–108 MB, fits easily.
+      // Quality 30 is plenty for intermediate frames — the final H.264 pass
+      // re-encodes from these, and video-over-video compositions tolerate it well.
       imageFormat: "jpeg",
+      jpegQuality: 30,
       // Cap OffthreadVideo frame cache at 100 MB. Without a limit it grows
       // unbounded across 1800 frames of a 60-second video, causing Chrome OOM.
       // Remotion re-fetches evicted frames from the compositor — a small
