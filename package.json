@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "bun run bundle && next build",
+    "vercel-build": "bash scripts/patch-compositor.sh && next build",
     "start": "next start",
     "bundle": "bunx remotion bundle src/index.ts && bun run bundle:sync",
     "bundle:sync": "rm -rf public/bundle && cp -r build public/bundle && find public/bundle/public -name '*.mp4' -delete 2>/dev/null; rm -rf public/bundle/public/bundle 2>/dev/null; find public/bundle -name '*.map' -delete 2>/dev/null; echo 'Bundle ready:'&& du -sh public/bundle",

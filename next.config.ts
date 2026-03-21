@@ -27,18 +27,14 @@ const nextConfig: NextConfig = {
   // to a top-level outputFileTracingIncludes key.
   outputFileTracingIncludes: {
     "/api/render": [
-      // Patched remotion compositor binary (GNU build, GLIBC_2.35→GLIBC_2.17 for hypot).
-      // Committed to bin/ so it's always present regardless of npm platform detection.
-      // Also include the GNU compositor .so libs — the binary uses $ORIGIN RPATH
-      // to load libavcodec.so etc. from the same directory at cold start.
-      "./bin/remotion-linux-x64",
+      // GNU compositor package — remotion binary (patchelf-patched at build time to
+      // remove GLIBC_2.35 hypot requirement), its bundled ffmpeg/ffprobe (with
+      // libfdk_aac for AAC audio encoding), and all .so shared libraries.
+      // $ORIGIN RPATH in the binary resolves .so files from the same directory.
       "./node_modules/@remotion/compositor-linux-x64-gnu/**",
       "./node_modules/@remotion/renderer/**",
       "./node_modules/remotion/**",
       "./node_modules/@remotion/bundler/**",
-      // Static ffmpeg/ffprobe — no shared-library dependencies
-      "./node_modules/ffmpeg-static/ffmpeg",
-      "./node_modules/ffprobe-static/bin/linux/x64/ffprobe",
     ],
     "/api/ffmpeg/process": [
       "./node_modules/ffmpeg-static/**",

@@ -52,96 +52,46 @@ export const runtime = "nodejs";
 // ─── Compositor Binary Selection ─────────────────────────────────────────────
 //
 // Problem: Remotion auto-selects @remotion/compositor-linux-x64-gnu on Linux,
-// but that binary requires GLIBC_2.35 which is absent from Vercel's runtime.
-// The MUSL package's ffmpeg/ffprobe also fail (need /lib/ld-musl-x86_64.so.1).
+// but that binary requires GLIBC_2.35 which is absent from Vercel's runtime
+// (Amazon Linux 2023, glibc 2.34).
 //
-// Solution: Assemble a /tmp directory with:
-//   • remotion  — MUSL package (pure-static Rust binary, no dynamic linker)
-//   • ffmpeg    — ffmpeg-static package (truly static, no GLIBC/MUSL needed)
-//   • ffprobe   — ffprobe-static package (same)
+// Solution: During the Vercel BUILD (scripts/patch-compositor.sh), patchelf
+// clears the GLIBC_2.35 version requirement for `hypot` in the binary IN PLACE.
+// At runtime we simply point Remotion at the GNU package directory — the binary
+// is already patched, its bundled ffmpeg/ffprobe (with libfdk_aac) are alongside
+// it, and $ORIGIN RPATH resolves the .so libs from the same directory.
 //
-// All three are static; no shared library or dynamic linker required.
-// The dir is built once per cold start; warm requests skip it.
-// On macOS this returns undefined — Remotion picks darwin binaries itself.
+// On macOS this returns undefined — Remotion picks darwin binaries automatically.
 
-const COMBINED_BIN_DIR = path.join(os.tmpdir(), "remotion-bin-mix");
+// Cached result — computed once per cold start.
+let gnuBinariesDir: string | undefined | null = null;
 
-function findPkgBinary(candidates: string[]): string | null {
-  for (const p of candidates) {
+function getGnuBinariesDir(): string | undefined {
+  if (gnuBinariesDir !== null) return gnuBinariesDir;
+  if (process.platform !== "linux") {
+    gnuBinariesDir = undefined;
+    return undefined;
+  }
+
+  const candidates = [
+    process.env.LAMBDA_TASK_ROOT ?? "/var/task",
+    process.cwd(),
+  ];
+
+  for (const base of candidates) {
+    const dir = path.join(base, "node_modules/@remotion/compositor-linux-x64-gnu");
     try {
-      if (fs.existsSync(p)) return p;
+      if (fs.existsSync(path.join(dir, "remotion"))) {
+        console.log(`[render] GNU compositor found at: ${dir}`);
+        gnuBinariesDir = dir;
+        return dir;
+      }
     } catch { /* ignore */ }
   }
-  return null;
-}
 
-async function prepareCombinedBinariesDir(): Promise<string | undefined> {
-  if (process.platform !== "linux") return undefined;
-
-  // Warm start: already assembled.
-  if (fs.existsSync(path.join(COMBINED_BIN_DIR, "remotion"))) {
-    return COMBINED_BIN_DIR;
-  }
-
-  const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
-  const cwd = process.cwd();
-
-  // Patched remotion binary committed to bin/ — GNU build with GLIBC_2.35 downgraded
-  // to GLIBC_2.17 for the single `hypot` symbol. Vercel has glibc 2.34 (AL2023).
-  // Committed directly so it's always present regardless of npm platform checks.
-  const patchedBinary = findPkgBinary([
-    path.join(taskRoot, "bin/remotion-linux-x64"),
-    path.join(cwd,      "bin/remotion-linux-x64"),
-  ]);
-
-  // GNU compositor .so libs (libavcodec.so etc.) — needed because the binary's
-  // $ORIGIN RPATH resolves to the directory it runs from. We copy them to /tmp
-  // so they're found alongside our binary copy.
-  const gnuPkgDir = [
-    path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-gnu"),
-    path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-gnu"),
-  ].find(d => { try { return fs.existsSync(path.join(d, "remotion")); } catch { return false; } });
-
-  if (!patchedBinary) {
-    console.warn("[render] Patched remotion binary not found — falling back to default");
-    return undefined;
-  }
-  if (!gnuPkgDir) {
-    console.warn("[render] GNU compositor package not found — falling back to default");
-    return undefined;
-  }
-
-  fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
-
-  // Copy patched remotion binary to /tmp.
-  // (GNU build with GLIBC_2.35 hypot requirement patched to GLIBC_2.17)
-  fs.copyFileSync(patchedBinary, path.join(COMBINED_BIN_DIR, "remotion"));
-  fs.chmodSync(path.join(COMBINED_BIN_DIR, "remotion"), 0o755);
-
-  // Copy the GNU compositor's entire set of binaries + .so libs.
-  // We use the PACKAGE'S ffmpeg/ffprobe (not ffmpeg-static) because they are
-  // built by Remotion with libfdk_aac support — required for AAC audio encoding.
-  // ffmpeg-static lacks libfdk_aac and breaks audio for all compositions.
-  for (const entry of fs.readdirSync(gnuPkgDir)) {
-    if (entry === "ffmpeg" || entry === "ffprobe" || entry.endsWith(".so")) {
-      const src = path.join(gnuPkgDir, entry);
-      const dst = path.join(COMBINED_BIN_DIR, entry);
-      fs.copyFileSync(src, dst);
-      fs.chmodSync(dst, 0o755);
-    }
-  }
-
-  return COMBINED_BIN_DIR;
-}
-
-// Module-level promise — deduplicates concurrent cold-start preparations.
-let combinedBinDirPromise: Promise<string | undefined> | null = null;
-
-function getCombinedBinariesDir(): Promise<string | undefined> {
-  if (!combinedBinDirPromise) {
-    combinedBinDirPromise = prepareCombinedBinariesDir();
-  }
-  return combinedBinDirPromise;
+  console.warn("[render] GNU compositor not found — Remotion will use default path");
+  gnuBinariesDir = undefined;
+  return undefined;
 }
 
 // ─── Bundle URL Resolution ────────────────────────────────────────────────────
@@ -225,10 +175,8 @@ export async function POST(req: NextRequest) {
     // will find the binary already extracted there and skip the download.
     // getChromiumExecutable() deduplicates concurrent extraction via a module-level
     // promise so parallel requests don't race to write the same binary (ETXTBSY).
-    const [browserExecutable, binariesDirectory] = await Promise.all([
-      getChromiumExecutable(),
-      getCombinedBinariesDir(),
-    ]);
+    const browserExecutable = await getChromiumExecutable();
+    const binariesDirectory = getGnuBinariesDir();
 
     // Select composition (validates compositionId + resolves duration)
     const composition = await selectComposition({
@@ -248,7 +196,7 @@ export async function POST(req: NextRequest) {
       inputProps,
       browserExecutable,
       chromiumOptions: CHROMIUM_OPTIONS,
-      // Combined bin dir: MUSL compositor + GNU ffmpeg/ffprobe.
+      // GNU package dir (patchelf-patched at build time) on Linux.
       // undefined on macOS → Remotion uses its darwin binary automatically.
       ...(binariesDirectory ? { binariesDirectory } : {}),
       onProgress: async ({ progress }) => {
