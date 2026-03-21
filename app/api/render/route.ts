@@ -86,16 +86,17 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
   const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
   const cwd = process.cwd();
 
-  // MUSL remotion compositor — fully static Rust binary (no shared-library deps).
-  // Moved from optionalDependencies to dependencies so npm installs it on Vercel
-  // glibc Linux. The GNU compositor's 'remotion' binary dynamically links
-  // libavcodec.so which is absent on Vercel; MUSL has everything compiled in.
-  const muslCompositor = findPkgBinary([
-    path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-musl/remotion"),
-    path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-musl/remotion"),
-  ]);
+  // GNU compositor package dir — glibc .so files CAN be loaded on Vercel (proven:
+  // motion-graphics render successfully). We copy the binary + all its .so libs
+  // to /tmp so $ORIGIN RPATH resolves correctly from the new location.
+  // We then REPLACE its ffmpeg/ffprobe with truly-static builds (no GLIBC_2.35)
+  // so video-frame decoding via ffmpeg subprocess also works.
+  const gnuPkgDir = [
+    path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-gnu"),
+    path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-gnu"),
+  ].find(d => { try { return fs.existsSync(path.join(d, "remotion")); } catch { return false; } });
 
-  // ffmpeg-static — truly static Linux build (no GLIBC/MUSL dependency)
+  // ffmpeg-static — truly static Linux build (no GLIBC dependency)
   const staticFfmpeg = findPkgBinary([
     path.join(taskRoot, "node_modules/ffmpeg-static/ffmpeg"),
     path.join(cwd,      "node_modules/ffmpeg-static/ffmpeg"),
@@ -107,8 +108,8 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
     path.join(cwd,      "node_modules/ffprobe-static/bin/linux/x64/ffprobe"),
   ]);
 
-  if (!muslCompositor) {
-    console.warn("[render] MUSL compositor not found — falling back to default (motion graphics may still work, video compositions will fail)");
+  if (!gnuPkgDir) {
+    console.warn("[render] GNU compositor package not found — falling back to default");
     return undefined;
   }
   if (!staticFfmpeg || !staticFfprobe) {
@@ -118,10 +119,22 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
 
   fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
 
+  // Copy GNU compositor binary + all its .so shared libraries to /tmp.
+  // The binary's $ORIGIN RPATH points to its own dir; copying the .so files
+  // alongside it lets the dynamic linker find them in /tmp.
+  for (const entry of fs.readdirSync(gnuPkgDir)) {
+    if (entry === "remotion" || entry.endsWith(".so")) {
+      const src = path.join(gnuPkgDir, entry);
+      const dst = path.join(COMBINED_BIN_DIR, entry);
+      fs.copyFileSync(src, dst);
+      fs.chmodSync(dst, 0o755);
+    }
+  }
+
+  // Overwrite GNU ffmpeg/ffprobe with static builds (no GLIBC_2.35 requirement).
   const copies: [string, string][] = [
-    [muslCompositor, path.join(COMBINED_BIN_DIR, "remotion")],
-    [staticFfmpeg,   path.join(COMBINED_BIN_DIR, "ffmpeg")],
-    [staticFfprobe,  path.join(COMBINED_BIN_DIR, "ffprobe")],
+    [staticFfmpeg,  path.join(COMBINED_BIN_DIR, "ffmpeg")],
+    [staticFfprobe, path.join(COMBINED_BIN_DIR, "ffprobe")],
   ];
   for (const [src, dst] of copies) {
     fs.copyFileSync(src, dst);
