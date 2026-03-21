@@ -53,62 +53,76 @@ export const runtime = "nodejs";
 //
 // Problem: Remotion auto-selects @remotion/compositor-linux-x64-gnu on Linux,
 // but that binary requires GLIBC_2.35 which is absent from Vercel's runtime.
+// The MUSL package's ffmpeg/ffprobe also fail (need /lib/ld-musl-x86_64.so.1).
 //
-// Solution: Build a combined /tmp directory containing:
-//   • remotion  — from the MUSL package (statically linked, no GLIBC constraint)
-//   • ffmpeg    — from the GNU package (bundled static build, no GLIBC_2.35 need)
-//   • ffprobe   — from the GNU package (same)
-// Then pass that directory as `binariesDirectory` to renderMedia, which causes
-// Remotion to skip its own platform detection and use our pre-built mix.
+// Solution: Assemble a /tmp directory with:
+//   • remotion  — MUSL package (pure-static Rust binary, no dynamic linker)
+//   • ffmpeg    — ffmpeg-static package (truly static, no GLIBC/MUSL needed)
+//   • ffprobe   — ffprobe-static package (same)
 //
-// The prep runs once per function instance; warm-start requests skip the copy.
-// On macOS the function returns undefined and Remotion uses its darwin binary.
+// All three are static; no shared library or dynamic linker required.
+// The dir is built once per cold start; warm requests skip it.
+// On macOS this returns undefined — Remotion picks darwin binaries itself.
 
-const COMBINED_BIN_DIR = path.join(os.tmpdir(), "remotion-compositor-musl");
+const COMBINED_BIN_DIR = path.join(os.tmpdir(), "remotion-bin-mix");
 
-function pkgDirs(pkgName: string): string[] {
-  const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
-  return [
-    path.join(taskRoot, "node_modules", pkgName),
-    path.join(process.cwd(), "node_modules", pkgName),
-  ];
+function findPkgBinary(candidates: string[]): string | null {
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return p;
+    } catch { /* ignore */ }
+  }
+  return null;
 }
 
 async function prepareCombinedBinariesDir(): Promise<string | undefined> {
   if (process.platform !== "linux") return undefined;
 
-  // Warm start: already assembled on this instance.
+  // Warm start: already assembled.
   if (fs.existsSync(path.join(COMBINED_BIN_DIR, "remotion"))) {
     return COMBINED_BIN_DIR;
   }
 
-  // Find the MUSL package directory — it ships remotion, ffmpeg, ffprobe AND
-  // all required .so shared libraries (libavcodec, libavdevice, etc.) as a
-  // self-contained bundle.  Copying everything to /tmp lets the binaries find
-  // their .so deps via $ORIGIN RPATH without needing system libraries.
-  const muslPkgDir = pkgDirs("@remotion/compositor-linux-x64-musl").find(
-    (d) => fs.existsSync(path.join(d, "remotion"))
-  );
+  const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
+  const cwd = process.cwd();
 
-  if (!muslPkgDir) {
-    console.warn("[render] MUSL compositor package not found; GLIBC error likely");
+  // MUSL remotion compositor (pure-static Rust binary)
+  const muslCompositor = findPkgBinary([
+    path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-musl/remotion"),
+    path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-musl/remotion"),
+  ]);
+
+  // ffmpeg-static — truly static Linux build (no GLIBC/MUSL dependency)
+  const staticFfmpeg = findPkgBinary([
+    path.join(taskRoot, "node_modules/ffmpeg-static/ffmpeg"),
+    path.join(cwd,      "node_modules/ffmpeg-static/ffmpeg"),
+  ]);
+
+  // ffprobe-static — same
+  const staticFfprobe = findPkgBinary([
+    path.join(taskRoot, "node_modules/ffprobe-static/bin/linux/x64/ffprobe"),
+    path.join(cwd,      "node_modules/ffprobe-static/bin/linux/x64/ffprobe"),
+  ]);
+
+  if (!muslCompositor) {
+    console.warn("[render] MUSL compositor not found — GLIBC error likely");
+    return undefined;
+  }
+  if (!staticFfmpeg || !staticFfprobe) {
+    console.warn("[render] Static ffmpeg/ffprobe not found — falling back to default");
     return undefined;
   }
 
   fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
 
-  // Copy all files from the MUSL package (binaries + .so libs) to /tmp so the
-  // binaries can locate their shared libraries via relative RPATH ($ORIGIN).
-  for (const entry of fs.readdirSync(muslPkgDir)) {
-    const src = path.join(muslPkgDir, entry);
-    const dst = path.join(COMBINED_BIN_DIR, entry);
-    if (fs.statSync(src).isFile()) {
-      fs.copyFileSync(src, dst);
-      // Mark binaries and shared libs executable
-      if (!entry.endsWith(".js") && !entry.endsWith(".d.ts") && !entry.endsWith(".md")) {
-        fs.chmodSync(dst, 0o755);
-      }
-    }
+  const copies: [string, string][] = [
+    [muslCompositor, path.join(COMBINED_BIN_DIR, "remotion")],
+    [staticFfmpeg,   path.join(COMBINED_BIN_DIR, "ffmpeg")],
+    [staticFfprobe,  path.join(COMBINED_BIN_DIR, "ffprobe")],
+  ];
+  for (const [src, dst] of copies) {
+    fs.copyFileSync(src, dst);
+    fs.chmodSync(dst, 0o755);
   }
 
   return COMBINED_BIN_DIR;

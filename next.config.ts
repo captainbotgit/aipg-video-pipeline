@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
     "@remotion/compositor-darwin-arm64",
     "@remotion/compositor-darwin-x64",
     "ffmpeg-static",
+    "ffprobe-static",
     "fluent-ffmpeg",
   ],
   experimental: {
@@ -28,9 +29,12 @@ const nextConfig: NextConfig = {
       "./node_modules/@remotion/renderer/**",
       "./node_modules/remotion/**",
       "./node_modules/@remotion/bundler/**",
+      "./node_modules/ffmpeg-static/**",
+      "./node_modules/ffprobe-static/**",
     ],
     "/api/ffmpeg/process": [
       "./node_modules/ffmpeg-static/**",
+      "./node_modules/ffprobe-static/**",
       "./node_modules/fluent-ffmpeg/**",
     ],
   },
