@@ -264,12 +264,34 @@ export async function POST(req: NextRequest) {
     browserExecutable = await getChromiumExecutable();
     const binariesDirectory = getGnuBinariesDir();
 
-    // Pre-render cleanup — now that we know the Chromium executable path we can
-    // do an aggressive sweep: remove EVERYTHING in /tmp except the Chromium binary
-    // dir. Previous failed renders may have left dirs with arbitrary prefixes
-    // (OffthreadVideo frame caches, audio temp dirs, etc.) that prefix-based
-    // cleanup missed. This guarantees maximum free /tmp headroom every render.
+    // Log /tmp layout so we can understand what Chromium extracts and what
+    // render artifacts accumulate between warm-container invocations.
+    try {
+      const tmpDir = os.tmpdir();
+      const entries = fs.readdirSync(tmpDir).map((e) => {
+        try {
+          const s = fs.statSync(path.join(tmpDir, e));
+          return `${s.isDirectory() ? "D" : "F"} ${e}`;
+        } catch { return `? ${e}`; }
+      });
+      console.log(`[render] /tmp contents before cleanup (${entries.length} entries):\n  ${entries.join("\n  ")}`);
+      console.log(`[render] chromium executable: ${browserExecutable}`);
+    } catch { /* ignore */ }
+
+    // Pre-render cleanup — delete Remotion render artifact directories and
+    // orphaned output MP4 files. Chromium's extracted files are preserved.
     cleanupTmp(tmpPath, browserExecutable);
+
+    try {
+      const tmpDir = os.tmpdir();
+      const entries = fs.readdirSync(tmpDir).map((e) => {
+        try {
+          const s = fs.statSync(path.join(tmpDir, e));
+          return `${s.isDirectory() ? "D" : "F"} ${e}`;
+        } catch { return `? ${e}`; }
+      });
+      console.log(`[render] /tmp contents after cleanup (${entries.length} entries):\n  ${entries.join("\n  ")}`);
+    } catch { /* ignore */ }
 
     // Select composition (validates compositionId + resolves duration)
     const compositionRaw = await selectComposition({
