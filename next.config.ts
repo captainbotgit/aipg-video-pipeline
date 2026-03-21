@@ -6,18 +6,17 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "@remotion/renderer",
     "@remotion/bundler",
-    // GNU compositor — its 'remotion' binary is glibc-compatible on Vercel.
-    // Motion graphics compositions rely on it. Its bundled ffmpeg/ffprobe are
-    // NOT used at runtime — we replace them via binariesDirectory in route.ts.
+    // GNU compositor kept for fallback — its 'remotion' binary works for
+    // motion-graphics (no libavcodec needed). For video compositions we use
+    // MUSL compositor via binariesDirectory (see route.ts).
     "@remotion/compositor-linux-x64-gnu",
     // ffmpeg-static is required by fluent-ffmpeg in /api/ffmpeg/process
     "ffmpeg-static",
     "fluent-ffmpeg",
-    // MUSL compositor and darwin compositors excluded:
-    //   MUSL is not installed on Vercel glibc Linux (libc mismatch).
-    //   Darwin packages are irrelevant on Vercel Linux.
     // ffprobe-static is NOT listed here — we reference it by hardcoded path only.
     //   Listing it causes NFT to trace all 343MB of platform binaries.
+    // MUSL compositor is in regular dependencies (not optional) so npm installs
+    //   it on Vercel glibc Linux. Its 'remotion' binary is fully static (no .so deps).
   ],
   experimental: {
     serverMinification: false,
@@ -29,10 +28,10 @@ const nextConfig: NextConfig = {
   // to a top-level outputFileTracingIncludes key.
   outputFileTracingIncludes: {
     "/api/render": [
-      // GNU compositor binary — works on Vercel's glibc Linux without GLIBC_2.35.
-      // Its bundled ffmpeg/ffprobe (which do require GLIBC_2.35) are replaced at
-      // cold-start via prepareCombinedBinariesDir() using static builds instead.
-      "./node_modules/@remotion/compositor-linux-x64-gnu/remotion",
+      // MUSL compositor binary — fully static Rust build, no shared-library deps.
+      // Installed as a regular dependency so npm includes it on Vercel glibc Linux.
+      // Paired with static ffmpeg/ffprobe below to avoid any GLIBC/MUSL requirements.
+      "./node_modules/@remotion/compositor-linux-x64-musl/remotion",
       "./node_modules/@remotion/renderer/**",
       "./node_modules/remotion/**",
       "./node_modules/@remotion/bundler/**",

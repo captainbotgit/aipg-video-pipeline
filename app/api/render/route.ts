@@ -86,12 +86,13 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
   const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
   const cwd = process.cwd();
 
-  // GNU remotion compositor — the 'remotion' binary itself is glibc-compatible on
-  // Vercel (proven: motion-graphics compositions render successfully with it).
-  // Only its bundled ffmpeg/ffprobe require GLIBC_2.35; we replace those below.
-  const gnuCompositor = findPkgBinary([
-    path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-gnu/remotion"),
-    path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-gnu/remotion"),
+  // MUSL remotion compositor — fully static Rust binary (no shared-library deps).
+  // Moved from optionalDependencies to dependencies so npm installs it on Vercel
+  // glibc Linux. The GNU compositor's 'remotion' binary dynamically links
+  // libavcodec.so which is absent on Vercel; MUSL has everything compiled in.
+  const muslCompositor = findPkgBinary([
+    path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-musl/remotion"),
+    path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-musl/remotion"),
   ]);
 
   // ffmpeg-static — truly static Linux build (no GLIBC/MUSL dependency)
@@ -106,8 +107,8 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
     path.join(cwd,      "node_modules/ffprobe-static/bin/linux/x64/ffprobe"),
   ]);
 
-  if (!gnuCompositor) {
-    console.warn("[render] GNU compositor not found — falling back to default (motion graphics may still work)");
+  if (!muslCompositor) {
+    console.warn("[render] MUSL compositor not found — falling back to default (motion graphics may still work, video compositions will fail)");
     return undefined;
   }
   if (!staticFfmpeg || !staticFfprobe) {
@@ -118,9 +119,9 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
   fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
 
   const copies: [string, string][] = [
-    [gnuCompositor, path.join(COMBINED_BIN_DIR, "remotion")],
-    [staticFfmpeg,  path.join(COMBINED_BIN_DIR, "ffmpeg")],
-    [staticFfprobe, path.join(COMBINED_BIN_DIR, "ffprobe")],
+    [muslCompositor, path.join(COMBINED_BIN_DIR, "remotion")],
+    [staticFfmpeg,   path.join(COMBINED_BIN_DIR, "ffmpeg")],
+    [staticFfprobe,  path.join(COMBINED_BIN_DIR, "ffprobe")],
   ];
   for (const [src, dst] of copies) {
     fs.copyFileSync(src, dst);
