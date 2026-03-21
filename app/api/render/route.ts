@@ -180,18 +180,25 @@ function getGnuBinariesDir(): string | undefined {
 
 // ─── /tmp Cleanup ─────────────────────────────────────────────────────────────
 //
-// Vercel's /tmp is only 512 MB. @sparticuz/chromium-min extracts its binary
-// AND companion shared-library files (libnspr4.so, libX11.so, …) flat into
-// /tmp — all of these must be preserved across renders so Chrome can start.
+// Vercel's /tmp is only 512 MB. /tmp budget breakdown:
+//   ~250 MB  /tmp/chromium     — Chrome binary (FILE, never deleted here)
+//   ~50  MB  /tmp/al2023/      — shared libs: libnspr4.so, libX11.so… (preserved)
+//   ~5   MB  /tmp/fonts/       — font config (preserved)
+//   ~207 MB  remaining         — available for render artifacts
+//
+// IMPORTANT: chromium-pack/ (the downloaded tarball cache, ~100-200 MB) is
+// a DIRECTORY that we DELETE during cleanup. It is not needed after the initial
+// extraction — the binary (/tmp/chromium) and .so libs (/tmp/al2023/) persist.
+// Preserving it was previously causing ENOSPC on renders > ~90 frames.
 //
 // Remotion writes render artifacts as DIRECTORIES (not loose files):
 //   • /tmp/remotion-*       — per-render frame/audio temp dirs
 //   • /tmp/puppeteer_dev_*  — Chrome user-data-dir created per render
 //   • Plus dirs with unpredictable names from OffthreadVideo caches
 //
-// Strategy: delete every DIRECTORY in /tmp that is not part of the Chromium
-// installation, plus delete orphaned render-*.mp4 output files.
-// All loose FILES (including Chromium's .so libs) are left intact.
+// Strategy: delete every DIRECTORY in /tmp except al2023/ and fonts/ (and any
+// directory containing the Chromium binary, which is uncommon with chromium-min).
+// All loose FILES (Chromium binary, .so libs) are left intact.
 //
 // Called:
 //   • After getChromiumExecutable() resolves (pre-render, inside try block)
@@ -228,16 +235,20 @@ function cleanupTmp(outputPath: string, browserExecutable?: string) {
       if (stat.isDirectory()) {
         // Preserve Chromium sub-directories (rare but possible)
         if (chromiumDirs.has(entry)) continue;
-        // Preserve @sparticuz/chromium-min extraction dirs:
-        //   chromium-pack/ — downloaded tar contents
-        //   .local-chromium/ — older chromium-min versions
-        if (entry.startsWith("chromium") || entry.startsWith(".local-chromium")) continue;
         // Preserve AL2023 shared-library dir (/tmp/al2023/lib/libnspr4.so etc.)
         // LD_LIBRARY_PATH=/tmp/al2023/lib is set at module load — Chrome needs these.
         if (entry === "al2023") continue;
         // Preserve font config dir (/tmp/fonts/) extracted by chromium-min.
         if (entry === "fonts") continue;
-        // Delete all other dirs: Remotion frame dirs, Chrome profile dirs, etc.
+        // NOTE: We deliberately do NOT preserve "chromium-pack/" or other
+        // chromium-* directories. chromium-pack/ is the downloaded tarball cache
+        // (~100-200 MB) — after extraction it is no longer needed. The binary
+        // (/tmp/chromium) is a FILE not a DIR, so it is never touched here.
+        // Keeping chromium-pack/ alongside the ~250 MB binary leaves only ~60 MB
+        // for render artifacts, causing ENOSPC on anything longer than ~90 frames.
+        //
+        // Delete all other dirs: Remotion frame dirs, Chrome profile dirs,
+        // chromium-pack tarball cache, etc.
         try { fs.rmSync(fullPath, { recursive: true, force: true }); } catch { /* ignore */ }
       } else {
         // Only delete orphaned render MP4 output files; leave all other
