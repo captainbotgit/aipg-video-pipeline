@@ -51,26 +51,33 @@ let chromiumExecutablePromise: Promise<string> | null = null;
 
 // ─── Chromium Self-Healing ────────────────────────────────────────────────────
 //
-// @sparticuz/chromium-min extracts the Chrome binary AND companion shared
-// libraries (libnspr4.so, libnss3.so, libX11.so, …) FLAT into /tmp.
-// Its executablePath() checks only whether /tmp/chromium (the binary) exists;
-// if it does it returns immediately WITHOUT verifying the .so files.
+// @sparticuz/chromium-min on AL2023/Vercel extracts files into these /tmp dirs:
+//   /tmp/chromium          — the Chrome binary (file)
+//   /tmp/chromium-pack/    — downloaded tar (dir, starts with "chromium")
+//   /tmp/al2023/lib/       — shared libs: libnspr4.so, libnss3.so, libX11.so…
+//   /tmp/fonts/            — font config files
+//   /tmp/*.so              — swiftshader libs extracted flat into /tmp (files)
 //
-// Problem: a previous buggy cleanupTmp() deleted loose .so files from /tmp,
-// leaving warm containers where /tmp/chromium exists but .so files are gone.
-// Every request fails with "libnspr4.so: cannot open shared object file".
+// setupLambdaEnvironment() sets LD_LIBRARY_PATH=/tmp/al2023/lib at module load
+// so Chrome can find libnspr4.so etc. there.
 //
-// Fix (proactive): before returning a cached path, verify that the binary
-// AND at least one critical .so file exist. If the .so is missing, delete the
-// binary and reset the promise so executablePath() fully re-extracts the pack
-// (binary + ALL .so libs) on the CURRENT request — not just the next one.
+// ROOT CAUSE of "libnspr4.so: cannot open shared object file":
+//   cleanupTmp() was deleting /tmp/al2023/ (doesn't start with "chromium"),
+//   removing the shared libraries Chrome requires on every render.
 //
-// Fix (reactive): in the catch block, also detect Chrome-launch errors and
-// invalidate the cache so future requests on this container also self-heal.
+// inflate() (used by executablePath to extract al2023.tar.br) has an early-return:
+//   if /tmp/al2023 already EXISTS it skips extraction entirely. So just deleting
+//   the chromium binary isn't enough — we must also delete /tmp/al2023/ to force
+//   the full re-extraction of the .so files.
+//
+// FIXES:
+//   1. cleanupTmp(): preserve /tmp/al2023/ and /tmp/fonts/ in addition to /tmp/chromium*/
+//   2. Sentinel: check /tmp/al2023/lib/libnspr4.so (correct AL2023 path)
+//   3. invalidateChromiumCache(): delete both /tmp/chromium AND /tmp/al2023/
 
-// A .so that Chrome requires and that is always present in chromium-min's pack.
-// Used as a proxy to detect a corrupted (partially-wiped) Chromium installation.
-const CHROMIUM_SENTINEL_SO = "libnspr4.so";
+// Sentinel path for shared libs on AL2023/Vercel — inside the al2023 extraction dir.
+const CHROMIUM_AL2023_DIR = path.join(os.tmpdir(), "al2023");
+const CHROMIUM_SENTINEL_SO = path.join(CHROMIUM_AL2023_DIR, "lib", "libnspr4.so");
 
 const CHROME_BROKEN_PATTERNS = [
   "cannot open shared object file",
@@ -86,37 +93,33 @@ function isBrokenChromiumError(message: string): boolean {
 
 function invalidateChromiumCache(): void {
   chromiumExecutablePromise = null;
+  // Delete the binary so executablePath() re-downloads the pack.
   const binaryPath = path.join(os.tmpdir(), "chromium");
-  try {
-    if (fs.existsSync(binaryPath)) {
-      fs.unlinkSync(binaryPath);
-      console.log("[render] Invalidated Chromium cache — binary deleted, will re-extract");
-    }
-  } catch { /* ignore */ }
+  try { if (fs.existsSync(binaryPath)) fs.unlinkSync(binaryPath); } catch { /* ignore */ }
+  // Delete /tmp/al2023/ so inflate() doesn't early-return on existing dir
+  // and fully re-extracts the .so files from al2023.tar.br.
+  try { if (fs.existsSync(CHROMIUM_AL2023_DIR)) fs.rmSync(CHROMIUM_AL2023_DIR, { recursive: true, force: true }); } catch { /* ignore */ }
+  console.log("[render] Invalidated Chromium cache — binary + al2023 dir deleted, will re-extract");
 }
 
 async function getChromiumExecutable(): Promise<string> {
-  // Proactive health check: if /tmp/chromium exists but libnspr4.so is missing,
-  // the installation is corrupted (e.g. from a previous buggy cleanup that deleted
-  // .so files). Delete the binary so executablePath() performs a full re-extraction
-  // (binary + ALL .so libs) on THIS request, not just the next one.
+  // Unconditional health check: if the Chrome binary exists but the sentinel
+  // .so is missing (from /tmp/al2023/lib/), the installation is corrupted.
+  // Delete both the binary AND /tmp/al2023/ so executablePath() fully
+  // re-extracts the Chromium pack (binary + al2023 .so libs) on THIS request.
   //
-  // This check runs unconditionally — including when chromiumExecutablePromise is null
-  // (new module load on a warm container that still has a stale /tmp). Without this,
-  // executablePath() would see /tmp/chromium exist and return early without re-extracting,
-  // leaving libnspr4.so missing and Chrome broken.
+  // Must run unconditionally (not gated on chromiumExecutablePromise) —
+  // warm containers with a freshly loaded module (promise=null) but stale
+  // /tmp need this check just as much as containers with a cached promise.
   const binaryPath = path.join(os.tmpdir(), "chromium");
-  const sentinelPath = path.join(os.tmpdir(), CHROMIUM_SENTINEL_SO);
   const binaryExists = fs.existsSync(binaryPath);
-  const sentinelExists = fs.existsSync(sentinelPath);
+  const sentinelExists = fs.existsSync(CHROMIUM_SENTINEL_SO);
 
   if (binaryExists && !sentinelExists) {
-    console.warn(`[render] Corrupted Chromium install — binary exists but ${CHROMIUM_SENTINEL_SO} missing. Forcing re-extraction.`);
-    chromiumExecutablePromise = null;
-    try { fs.unlinkSync(binaryPath); } catch { /* ignore */ }
+    console.warn("[render] Corrupted Chromium install — binary present but /tmp/al2023/lib/libnspr4.so missing. Forcing full re-extraction.");
+    invalidateChromiumCache();
   } else if (!binaryExists) {
-    // Binary absent (fresh /tmp or self-healed) — ensure promise is reset so
-    // executablePath() runs a fresh extraction, not a stale in-flight promise.
+    // Binary absent — reset promise to avoid reusing a stale in-flight one.
     chromiumExecutablePromise = null;
   }
 
@@ -225,8 +228,15 @@ function cleanupTmp(outputPath: string, browserExecutable?: string) {
       if (stat.isDirectory()) {
         // Preserve Chromium sub-directories (rare but possible)
         if (chromiumDirs.has(entry)) continue;
-        // Preserve .local-chromium used by older chromium-min versions
+        // Preserve @sparticuz/chromium-min extraction dirs:
+        //   chromium-pack/ — downloaded tar contents
+        //   .local-chromium/ — older chromium-min versions
         if (entry.startsWith("chromium") || entry.startsWith(".local-chromium")) continue;
+        // Preserve AL2023 shared-library dir (/tmp/al2023/lib/libnspr4.so etc.)
+        // LD_LIBRARY_PATH=/tmp/al2023/lib is set at module load — Chrome needs these.
+        if (entry === "al2023") continue;
+        // Preserve font config dir (/tmp/fonts/) extracted by chromium-min.
+        if (entry === "fonts") continue;
         // Delete all other dirs: Remotion frame dirs, Chrome profile dirs, etc.
         try { fs.rmSync(fullPath, { recursive: true, force: true }); } catch { /* ignore */ }
       } else {
