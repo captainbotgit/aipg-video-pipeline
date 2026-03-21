@@ -94,6 +94,30 @@ function getGnuBinariesDir(): string | undefined {
   return undefined;
 }
 
+// ─── /tmp Cleanup ─────────────────────────────────────────────────────────────
+//
+// Remotion writes per-frame PNGs and audio assets to uniquely-named temp
+// directories inside /tmp (e.g. /tmp/remotion-XXXX). On warm Vercel containers
+// these accumulate across invocations and fill the 512 MB /tmp limit, causing
+// ENOSPC on longer renders like DentalExplainer.
+//
+// cleanupTmp() removes the render output MP4 AND all /tmp/remotion-* dirs.
+// It is called in both the success path (after upload) and the error path.
+
+function cleanupTmp(outputPath: string) {
+  // Remove the render output file
+  try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
+  // Remove Remotion's temp asset directories (frame PNGs, audio, etc.)
+  try {
+    const tmpDir = os.tmpdir();
+    for (const entry of fs.readdirSync(tmpDir)) {
+      if (entry.startsWith("remotion-")) {
+        fs.rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 // ─── Bundle URL Resolution ────────────────────────────────────────────────────
 
 function getBundleUrl(req: NextRequest): string {
@@ -228,12 +252,9 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    // Cleanup temp
-    try {
-      fs.unlinkSync(tmpPath);
-    } catch {
-      /* ignore */
-    }
+    // Cleanup: remove the output MP4 and any Remotion temp asset dirs left
+    // in /tmp. On warm container reuse these accumulate and cause ENOSPC.
+    cleanupTmp(tmpPath);
 
     const completedAt = new Date().toISOString();
 
@@ -260,11 +281,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
 
-    try {
-      fs.unlinkSync(tmpPath);
-    } catch {
-      /* ignore */
-    }
+    // Clean up render output + Remotion temp dirs so /tmp doesn't fill on retries
+    cleanupTmp(tmpPath);
 
     await writeStatus(jobId, {
       jobId,
