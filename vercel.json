@@ -1,5 +1,11 @@
 {
   "framework": "nextjs",
   "installCommand": "bun install",
-  "buildCommand": "bun run build"
+  "buildCommand": "bun run build",
+  "functions": {
+    "app/api/render/route.ts": {
+      "memory": 3009,
+      "maxDuration": 300
+    }
+  }
 }

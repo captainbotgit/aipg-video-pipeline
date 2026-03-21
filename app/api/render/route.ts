@@ -28,9 +28,19 @@ const CHROMIUM_BINARY_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v143.0.4/chromium-v143.0.4-pack.x64.tar";
 
 const CHROMIUM_OPTIONS = {
-  disableWebSecurity: false,
-  enableMultiProcessOnLinux: true,
+  disableWebSecurity: true,
+  // Single-process reduces per-tab overhead and prevents OOM on longer compositions
+  // (DentalExplainer = 60 s with multiple OffthreadVideo layers).
+  enableMultiProcessOnLinux: false,
   headless: true,
+  chromiumFlags: [
+    // Don't write to /dev/shm (Vercel containers restrict this); use /tmp instead
+    "--disable-dev-shm-usage",
+    // Suppress GPU process overhead (headless renders don't need a GPU)
+    "--disable-gpu",
+    // Keep a lean renderer
+    "--no-zygote",
+  ],
 } as const;
 
 // Module-level promise so concurrent cold-start requests on the same instance
@@ -223,6 +233,9 @@ export async function POST(req: NextRequest) {
       // GNU package dir (patchelf-patched at build time) on Linux.
       // undefined on macOS → Remotion uses its darwin binary automatically.
       ...(binariesDirectory ? { binariesDirectory } : {}),
+      // Single Chrome tab renders one frame at a time — avoids parallel decoding
+      // blowing through Vercel's 3 GB RAM cap on long OffthreadVideo compositions.
+      concurrency: 1,
       onProgress: async ({ progress }) => {
         await writeStatus(jobId, {
           jobId,
