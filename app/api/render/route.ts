@@ -380,6 +380,13 @@ export async function POST(req: NextRequest) {
       // Single Chrome tab renders one frame at a time — avoids parallel decoding
       // blowing through Vercel's 3 GB RAM cap on long OffthreadVideo compositions.
       concurrency: 1,
+      // JPEG intermediate frames (vs PNG default) significantly reduce /tmp usage.
+      // Vercel /tmp is capped at 512 MB; after Chromium extraction (~250 MB) only
+      // ~262 MB remains for render artifacts. PNG frames at 1080×1920 can be
+      // 500 KB–2 MB each — JPEG compresses to ~50–150 KB (10–20× smaller).
+      // Trade-off: slight quality loss in intermediate frames, acceptable for
+      // video-over-video compositions where the final H.264 encode dominates.
+      imageFormat: "jpeg",
       onProgress: async ({ progress }) => {
         await writeStatus(jobId, {
           jobId,
