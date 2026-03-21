@@ -117,12 +117,24 @@ function getGnuBinariesDir(): string | undefined {
 function cleanupTmp(outputPath: string) {
   // Remove the render output file
   try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
-  // Remove Remotion's temp asset directories (frame PNGs, audio, etc.)
+
+  // Aggressively free /tmp between renders.
+  // On warm Vercel containers /tmp is only 512 MB; the extracted Chromium
+  // binary alone is ~300 MB, leaving very little room. We clean:
+  //   • /tmp/remotion-*       — Remotion per-render frame/audio temp dirs
+  //   • /tmp/puppeteer_dev_*  — Chrome user-data-dir created per render
+  //   • /tmp/render-*.mp4     — any orphaned MP4 output files
+  // We deliberately do NOT remove the extracted Chromium binary
+  // (lives at /tmp/chromium-* or /tmp/.local-chromium) since it is reused
+  // across warm invocations and re-downloading it is expensive.
+  const SAFE_PREFIXES = ["remotion-", "puppeteer_dev_", "render-"];
   try {
     const tmpDir = os.tmpdir();
     for (const entry of fs.readdirSync(tmpDir)) {
-      if (entry.startsWith("remotion-")) {
-        fs.rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
+      if (SAFE_PREFIXES.some((p) => entry.startsWith(p))) {
+        try {
+          fs.rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
+        } catch { /* ignore individual failures */ }
       }
     }
   } catch { /* ignore */ }
@@ -202,6 +214,10 @@ export async function POST(req: NextRequest) {
   });
 
   const tmpPath = path.join(os.tmpdir(), `render-${jobId}.mp4`);
+
+  // Pre-render cleanup — free any stale /tmp artifacts from previous renders
+  // so we start with maximum headroom on warm containers.
+  cleanupTmp(tmpPath);
 
   try {
     // Resolve a Chromium binary that works in the Vercel serverless environment.
