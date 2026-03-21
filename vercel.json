@@ -5,7 +5,7 @@
   "functions": {
     "app/api/render/route.ts": {
       "memory": 3009,
-      "maxDuration": 300
+      "maxDuration": 800
     }
   }
 }

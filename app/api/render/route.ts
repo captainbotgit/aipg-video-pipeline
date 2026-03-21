@@ -135,8 +135,9 @@ async function getChromiumExecutable(): Promise<string> {
   return chromiumExecutablePromise;
 }
 
-// Vercel Fluid Compute — allow up to 5 minutes for renders
-export const maxDuration = 300;
+// Vercel Fluid Compute — allow up to ~13 minutes for long renders (Pro plan max).
+// DentalExplainer at 1800 frames takes ~10-11 min; 300s (5 min) is too short.
+export const maxDuration = 800;
 export const runtime = "nodejs";
 
 // ─── Compositor Binary Selection ─────────────────────────────────────────────
@@ -425,6 +426,11 @@ export async function POST(req: NextRequest) {
       // Trade-off: slight quality loss in intermediate frames, acceptable for
       // video-over-video compositions where the final H.264 encode dominates.
       imageFormat: "jpeg",
+      // Cap OffthreadVideo frame cache at 100 MB. Without a limit it grows
+      // unbounded across 1800 frames of a 60-second video, causing Chrome OOM.
+      // Remotion re-fetches evicted frames from the compositor — a small
+      // perf trade-off for the ability to complete long renders on limited RAM.
+      offthreadVideoCacheSizeInBytes: 100 * 1024 * 1024,
       onProgress: async ({ progress }) => {
         await writeStatus(jobId, {
           jobId,
