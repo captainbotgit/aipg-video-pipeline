@@ -96,15 +96,28 @@ function invalidateChromiumCache(): void {
 }
 
 async function getChromiumExecutable(): Promise<string> {
-  // Proactive health check: if we have a cached path but the sentinel .so is
-  // missing, the Chromium installation is corrupted. Force full re-extraction.
-  if (chromiumExecutablePromise) {
-    const sentinelPath = path.join(os.tmpdir(), CHROMIUM_SENTINEL_SO);
-    const soMissing = !fs.existsSync(sentinelPath);
-    if (soMissing) {
-      console.warn(`[render] ${CHROMIUM_SENTINEL_SO} missing — Chromium installation corrupted, forcing re-extraction`);
-      invalidateChromiumCache();
-    }
+  // Proactive health check: if /tmp/chromium exists but libnspr4.so is missing,
+  // the installation is corrupted (e.g. from a previous buggy cleanup that deleted
+  // .so files). Delete the binary so executablePath() performs a full re-extraction
+  // (binary + ALL .so libs) on THIS request, not just the next one.
+  //
+  // This check runs unconditionally — including when chromiumExecutablePromise is null
+  // (new module load on a warm container that still has a stale /tmp). Without this,
+  // executablePath() would see /tmp/chromium exist and return early without re-extracting,
+  // leaving libnspr4.so missing and Chrome broken.
+  const binaryPath = path.join(os.tmpdir(), "chromium");
+  const sentinelPath = path.join(os.tmpdir(), CHROMIUM_SENTINEL_SO);
+  const binaryExists = fs.existsSync(binaryPath);
+  const sentinelExists = fs.existsSync(sentinelPath);
+
+  if (binaryExists && !sentinelExists) {
+    console.warn(`[render] Corrupted Chromium install — binary exists but ${CHROMIUM_SENTINEL_SO} missing. Forcing re-extraction.`);
+    chromiumExecutablePromise = null;
+    try { fs.unlinkSync(binaryPath); } catch { /* ignore */ }
+  } else if (!binaryExists) {
+    // Binary absent (fresh /tmp or self-healed) — ensure promise is reset so
+    // executablePath() runs a fresh extraction, not a stale in-flight promise.
+    chromiumExecutablePromise = null;
   }
 
   if (!chromiumExecutablePromise) {
