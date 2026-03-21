@@ -86,10 +86,12 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
   const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
   const cwd = process.cwd();
 
-  // MUSL remotion compositor (pure-static Rust binary)
-  const muslCompositor = findPkgBinary([
-    path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-musl/remotion"),
-    path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-musl/remotion"),
+  // GNU remotion compositor — the 'remotion' binary itself is glibc-compatible on
+  // Vercel (proven: motion-graphics compositions render successfully with it).
+  // Only its bundled ffmpeg/ffprobe require GLIBC_2.35; we replace those below.
+  const gnuCompositor = findPkgBinary([
+    path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-gnu/remotion"),
+    path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-gnu/remotion"),
   ]);
 
   // ffmpeg-static — truly static Linux build (no GLIBC/MUSL dependency)
@@ -104,8 +106,8 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
     path.join(cwd,      "node_modules/ffprobe-static/bin/linux/x64/ffprobe"),
   ]);
 
-  if (!muslCompositor) {
-    console.warn("[render] MUSL compositor not found — GLIBC error likely");
+  if (!gnuCompositor) {
+    console.warn("[render] GNU compositor not found — falling back to default (motion graphics may still work)");
     return undefined;
   }
   if (!staticFfmpeg || !staticFfprobe) {
@@ -116,9 +118,9 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
   fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
 
   const copies: [string, string][] = [
-    [muslCompositor, path.join(COMBINED_BIN_DIR, "remotion")],
-    [staticFfmpeg,   path.join(COMBINED_BIN_DIR, "ffmpeg")],
-    [staticFfprobe,  path.join(COMBINED_BIN_DIR, "ffprobe")],
+    [gnuCompositor, path.join(COMBINED_BIN_DIR, "remotion")],
+    [staticFfmpeg,  path.join(COMBINED_BIN_DIR, "ffmpeg")],
+    [staticFfprobe, path.join(COMBINED_BIN_DIR, "ffprobe")],
   ];
   for (const [src, dst] of copies) {
     fs.copyFileSync(src, dst);

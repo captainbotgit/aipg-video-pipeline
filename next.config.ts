@@ -6,14 +6,18 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "@remotion/renderer",
     "@remotion/bundler",
-    "@remotion/compositor-linux-x64-musl",
-    "@remotion/compositor-darwin-arm64",
-    "@remotion/compositor-darwin-x64",
+    // GNU compositor — its 'remotion' binary is glibc-compatible on Vercel.
+    // Motion graphics compositions rely on it. Its bundled ffmpeg/ffprobe are
+    // NOT used at runtime — we replace them via binariesDirectory in route.ts.
+    "@remotion/compositor-linux-x64-gnu",
     // ffmpeg-static is required by fluent-ffmpeg in /api/ffmpeg/process
     "ffmpeg-static",
     "fluent-ffmpeg",
+    // MUSL compositor and darwin compositors excluded:
+    //   MUSL is not installed on Vercel glibc Linux (libc mismatch).
+    //   Darwin packages are irrelevant on Vercel Linux.
     // ffprobe-static is NOT listed here — we reference it by hardcoded path only.
-    // Listing it as serverExternal causes NFT to trace all 343MB of platform binaries.
+    //   Listing it causes NFT to trace all 343MB of platform binaries.
   ],
   experimental: {
     serverMinification: false,
@@ -25,9 +29,10 @@ const nextConfig: NextConfig = {
   // to a top-level outputFileTracingIncludes key.
   outputFileTracingIncludes: {
     "/api/render": [
-      // Only the MUSL compositor binary — we copy it to /tmp at cold start.
-      // The full GNU package is excluded; its .so files bloat the bundle.
-      "./node_modules/@remotion/compositor-linux-x64-musl/remotion",
+      // GNU compositor binary — works on Vercel's glibc Linux without GLIBC_2.35.
+      // Its bundled ffmpeg/ffprobe (which do require GLIBC_2.35) are replaced at
+      // cold-start via prepareCombinedBinariesDir() using static builds instead.
+      "./node_modules/@remotion/compositor-linux-x64-gnu/remotion",
       "./node_modules/@remotion/renderer/**",
       "./node_modules/remotion/**",
       "./node_modules/@remotion/bundler/**",
