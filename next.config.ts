@@ -6,7 +6,6 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "@remotion/renderer",
     "@remotion/bundler",
-    "@remotion/compositor-linux-x64-gnu",
     "@remotion/compositor-linux-x64-musl",
     "@remotion/compositor-darwin-arm64",
     "@remotion/compositor-darwin-x64",
@@ -24,13 +23,15 @@ const nextConfig: NextConfig = {
   // to a top-level outputFileTracingIncludes key.
   outputFileTracingIncludes: {
     "/api/render": [
-      "./node_modules/@remotion/compositor-linux-x64-gnu/**",
-      "./node_modules/@remotion/compositor-linux-x64-musl/**",
+      // Only the MUSL compositor binary — we copy it to /tmp at cold start.
+      // The full GNU package is excluded; its .so files bloat the bundle.
+      "./node_modules/@remotion/compositor-linux-x64-musl/remotion",
       "./node_modules/@remotion/renderer/**",
       "./node_modules/remotion/**",
       "./node_modules/@remotion/bundler/**",
-      "./node_modules/ffmpeg-static/**",
-      "./node_modules/ffprobe-static/**",
+      // Static ffmpeg/ffprobe — no shared-library dependencies
+      "./node_modules/ffmpeg-static/ffmpeg",
+      "./node_modules/ffprobe-static/bin/linux/x64/ffprobe",
     ],
     "/api/ffmpeg/process": [
       "./node_modules/ffmpeg-static/**",
