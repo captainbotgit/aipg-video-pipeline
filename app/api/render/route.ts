@@ -86,11 +86,17 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
   const taskRoot = process.env.LAMBDA_TASK_ROOT ?? "/var/task";
   const cwd = process.cwd();
 
-  // GNU compositor package dir — glibc .so files CAN be loaded on Vercel (proven:
-  // motion-graphics render successfully). We copy the binary + all its .so libs
-  // to /tmp so $ORIGIN RPATH resolves correctly from the new location.
-  // We then REPLACE its ffmpeg/ffprobe with truly-static builds (no GLIBC_2.35)
-  // so video-frame decoding via ffmpeg subprocess also works.
+  // Patched remotion binary committed to bin/ — GNU build with GLIBC_2.35 downgraded
+  // to GLIBC_2.17 for the single `hypot` symbol. Vercel has glibc 2.34 (AL2023).
+  // Committed directly so it's always present regardless of npm platform checks.
+  const patchedBinary = findPkgBinary([
+    path.join(taskRoot, "bin/remotion-linux-x64"),
+    path.join(cwd,      "bin/remotion-linux-x64"),
+  ]);
+
+  // GNU compositor .so libs (libavcodec.so etc.) — needed because the binary's
+  // $ORIGIN RPATH resolves to the directory it runs from. We copy them to /tmp
+  // so they're found alongside our binary copy.
   const gnuPkgDir = [
     path.join(taskRoot, "node_modules/@remotion/compositor-linux-x64-gnu"),
     path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-gnu"),
@@ -108,8 +114,12 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
     path.join(cwd,      "node_modules/ffprobe-static/bin/linux/x64/ffprobe"),
   ]);
 
+  if (!patchedBinary) {
+    console.warn("[render] Patched remotion binary not found — falling back to default");
+    return undefined;
+  }
   if (!gnuPkgDir) {
-    console.warn("[render] GNU compositor package not found — falling back to default");
+    console.warn("[render] GNU compositor .so libs not found — falling back to default");
     return undefined;
   }
   if (!staticFfmpeg || !staticFfprobe) {
@@ -119,11 +129,15 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
 
   fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
 
-  // Copy GNU compositor binary + all its .so shared libraries to /tmp.
-  // The binary's $ORIGIN RPATH points to its own dir; copying the .so files
-  // alongside it lets the dynamic linker find them in /tmp.
+  // Copy patched remotion binary to /tmp.
+  fs.copyFileSync(patchedBinary, path.join(COMBINED_BIN_DIR, "remotion"));
+  fs.chmodSync(path.join(COMBINED_BIN_DIR, "remotion"), 0o755);
+
+  // Copy GNU compositor .so shared libraries to /tmp alongside the binary.
+  // $ORIGIN RPATH resolves relative to the binary location — all .so files
+  // must be in the same directory.
   for (const entry of fs.readdirSync(gnuPkgDir)) {
-    if (entry === "remotion" || entry.endsWith(".so")) {
+    if (entry.endsWith(".so")) {
       const src = path.join(gnuPkgDir, entry);
       const dst = path.join(COMBINED_BIN_DIR, entry);
       fs.copyFileSync(src, dst);

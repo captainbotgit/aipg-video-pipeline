@@ -27,9 +27,11 @@ const nextConfig: NextConfig = {
   // to a top-level outputFileTracingIncludes key.
   outputFileTracingIncludes: {
     "/api/render": [
-      // GNU compositor: binary + all .so shared libs (libavcodec.so etc.).
-      // The 'remotion' binary uses $ORIGIN RPATH — it needs its .so files in
-      // the same directory. We copy them all to /tmp at cold start (route.ts).
+      // Patched remotion compositor binary (GNU build, GLIBC_2.35→GLIBC_2.17 for hypot).
+      // Committed to bin/ so it's always present regardless of npm platform detection.
+      // Also include the GNU compositor .so libs — the binary uses $ORIGIN RPATH
+      // to load libavcodec.so etc. from the same directory at cold start.
+      "./bin/remotion-linux-x64",
       "./node_modules/@remotion/compositor-linux-x64-gnu/**",
       "./node_modules/@remotion/renderer/**",
       "./node_modules/remotion/**",
