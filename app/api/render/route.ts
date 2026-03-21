@@ -107,36 +107,58 @@ function getGnuBinariesDir(): string | undefined {
 
 // ─── /tmp Cleanup ─────────────────────────────────────────────────────────────
 //
-// Remotion writes per-frame PNGs and audio assets to uniquely-named temp
-// directories inside /tmp (e.g. /tmp/remotion-XXXX). On warm Vercel containers
-// these accumulate across invocations and fill the 512 MB /tmp limit, causing
-// ENOSPC on longer renders like DentalExplainer.
+// Vercel's /tmp is only 512 MB. The Chromium binary alone is ~200 MB once
+// extracted, leaving ~300 MB for render artifacts. On warm containers,
+// failed renders leave behind temp dirs that accumulate and fill /tmp.
 //
-// cleanupTmp() removes the render output MP4 AND all /tmp/remotion-* dirs.
-// It is called in both the success path (after upload) and the error path.
+// Remotion (and its OffthreadVideo path) writes temp dirs with many different
+// prefixes — not just "remotion-" but also unpredictable per-render dirs.
+// Prefix-based cleanup therefore misses entries and /tmp fills up.
+//
+// cleanupTmp() takes the known Chromium executable path so it can preserve
+// exactly the Chromium binary dir and wipe everything else in /tmp. This
+// gives each render the maximum available free space on warm containers.
+//
+// Called:
+//   • After getChromiumExecutable() resolves (pre-render, inside try block)
+//   • After successful upload
+//   • In the error catch block
 
-function cleanupTmp(outputPath: string) {
-  // Remove the render output file
+function cleanupTmp(outputPath: string, browserExecutable?: string) {
+  // Remove the render output file (may not exist yet on pre-render call)
   try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
 
-  // Aggressively free /tmp between renders.
-  // On warm Vercel containers /tmp is only 512 MB; the extracted Chromium
-  // binary alone is ~300 MB, leaving very little room. We clean:
-  //   • /tmp/remotion-*       — Remotion per-render frame/audio temp dirs
-  //   • /tmp/puppeteer_dev_*  — Chrome user-data-dir created per render
-  //   • /tmp/render-*.mp4     — any orphaned MP4 output files
-  // We deliberately do NOT remove the extracted Chromium binary
-  // (lives at /tmp/chromium-* or /tmp/.local-chromium) since it is reused
-  // across warm invocations and re-downloading it is expensive.
-  const SAFE_PREFIXES = ["remotion-", "puppeteer_dev_", "render-"];
+  const tmpDir = os.tmpdir();
+
+  // Determine which top-level /tmp entries to preserve.
+  // When we know the Chromium path we can preserve exactly its parent dir.
+  // Without it we fall back to name-based heuristics.
+  const preserveNames = new Set<string>();
+  if (browserExecutable) {
+    const rel = path.relative(tmpDir, browserExecutable);
+    const topLevel = rel.split(path.sep)[0];
+    if (topLevel && !topLevel.startsWith("..")) {
+      preserveNames.add(topLevel);
+    }
+    // Chromium tar download artifact
+    preserveNames.add("chromium.tar");
+    preserveNames.add("chromium-pack.tar");
+  }
+
   try {
-    const tmpDir = os.tmpdir();
     for (const entry of fs.readdirSync(tmpDir)) {
-      if (SAFE_PREFIXES.some((p) => entry.startsWith(p))) {
-        try {
-          fs.rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
-        } catch { /* ignore individual failures */ }
-      }
+      // Always preserve known Chromium paths (safety net when no execPath given)
+      if (
+        preserveNames.has(entry) ||
+        (!browserExecutable && (
+          entry.startsWith("chromium") ||
+          entry.startsWith(".local-chromium")
+        ))
+      ) continue;
+
+      try {
+        fs.rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
+      } catch { /* ignore individual failures */ }
     }
   } catch { /* ignore */ }
 }
@@ -223,9 +245,8 @@ export async function POST(req: NextRequest) {
 
   const tmpPath = path.join(os.tmpdir(), `render-${jobId}.mp4`);
 
-  // Pre-render cleanup — free any stale /tmp artifacts from previous renders
-  // so we start with maximum headroom on warm containers.
-  cleanupTmp(tmpPath);
+  // Hoisted so the catch block can also pass it to cleanupTmp.
+  let browserExecutable: string | undefined;
 
   try {
     // Resolve a Chromium binary that works in the Vercel serverless environment.
@@ -233,8 +254,15 @@ export async function POST(req: NextRequest) {
     // will find the binary already extracted there and skip the download.
     // getChromiumExecutable() deduplicates concurrent extraction via a module-level
     // promise so parallel requests don't race to write the same binary (ETXTBSY).
-    const browserExecutable = await getChromiumExecutable();
+    browserExecutable = await getChromiumExecutable();
     const binariesDirectory = getGnuBinariesDir();
+
+    // Pre-render cleanup — now that we know the Chromium executable path we can
+    // do an aggressive sweep: remove EVERYTHING in /tmp except the Chromium binary
+    // dir. Previous failed renders may have left dirs with arbitrary prefixes
+    // (OffthreadVideo frame caches, audio temp dirs, etc.) that prefix-based
+    // cleanup missed. This guarantees maximum free /tmp headroom every render.
+    cleanupTmp(tmpPath, browserExecutable);
 
     // Select composition (validates compositionId + resolves duration)
     const compositionRaw = await selectComposition({
@@ -295,9 +323,8 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    // Cleanup: remove the output MP4 and any Remotion temp asset dirs left
-    // in /tmp. On warm container reuse these accumulate and cause ENOSPC.
-    cleanupTmp(tmpPath);
+    // Cleanup: wipe /tmp (except Chromium binary) so the next render starts clean.
+    cleanupTmp(tmpPath, browserExecutable);
 
     const completedAt = new Date().toISOString();
 
@@ -324,8 +351,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
 
-    // Clean up render output + Remotion temp dirs so /tmp doesn't fill on retries
-    cleanupTmp(tmpPath);
+    // Clean up everything in /tmp (except Chromium) so retries have headroom.
+    cleanupTmp(tmpPath, browserExecutable);
 
     await writeStatus(jobId, {
       jobId,
