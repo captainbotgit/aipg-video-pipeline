@@ -107,17 +107,18 @@ function getGnuBinariesDir(): string | undefined {
 
 // ─── /tmp Cleanup ─────────────────────────────────────────────────────────────
 //
-// Vercel's /tmp is only 512 MB. The Chromium binary alone is ~200 MB once
-// extracted, leaving ~300 MB for render artifacts. On warm containers,
-// failed renders leave behind temp dirs that accumulate and fill /tmp.
+// Vercel's /tmp is only 512 MB. @sparticuz/chromium-min extracts its binary
+// AND companion shared-library files (libnspr4.so, libX11.so, …) flat into
+// /tmp — all of these must be preserved across renders so Chrome can start.
 //
-// Remotion (and its OffthreadVideo path) writes temp dirs with many different
-// prefixes — not just "remotion-" but also unpredictable per-render dirs.
-// Prefix-based cleanup therefore misses entries and /tmp fills up.
+// Remotion writes render artifacts as DIRECTORIES (not loose files):
+//   • /tmp/remotion-*       — per-render frame/audio temp dirs
+//   • /tmp/puppeteer_dev_*  — Chrome user-data-dir created per render
+//   • Plus dirs with unpredictable names from OffthreadVideo caches
 //
-// cleanupTmp() takes the known Chromium executable path so it can preserve
-// exactly the Chromium binary dir and wipe everything else in /tmp. This
-// gives each render the maximum available free space on warm containers.
+// Strategy: delete every DIRECTORY in /tmp that is not part of the Chromium
+// installation, plus delete orphaned render-*.mp4 output files.
+// All loose FILES (including Chromium's .so libs) are left intact.
 //
 // Called:
 //   • After getChromiumExecutable() resolves (pre-render, inside try block)
@@ -130,35 +131,41 @@ function cleanupTmp(outputPath: string, browserExecutable?: string) {
 
   const tmpDir = os.tmpdir();
 
-  // Determine which top-level /tmp entries to preserve.
-  // When we know the Chromium path we can preserve exactly its parent dir.
-  // Without it we fall back to name-based heuristics.
-  const preserveNames = new Set<string>();
+  // Identify Chromium sub-directories to keep (usually none — chromium-min
+  // places the binary and .so files directly in /tmp, not in a sub-dir).
+  const chromiumDirs = new Set<string>();
   if (browserExecutable) {
     const rel = path.relative(tmpDir, browserExecutable);
     const topLevel = rel.split(path.sep)[0];
     if (topLevel && !topLevel.startsWith("..")) {
-      preserveNames.add(topLevel);
+      try {
+        if (fs.statSync(path.join(tmpDir, topLevel)).isDirectory()) {
+          chromiumDirs.add(topLevel);
+        }
+      } catch { /* ignore */ }
     }
-    // Chromium tar download artifact
-    preserveNames.add("chromium.tar");
-    preserveNames.add("chromium-pack.tar");
   }
 
   try {
     for (const entry of fs.readdirSync(tmpDir)) {
-      // Always preserve known Chromium paths (safety net when no execPath given)
-      if (
-        preserveNames.has(entry) ||
-        (!browserExecutable && (
-          entry.startsWith("chromium") ||
-          entry.startsWith(".local-chromium")
-        ))
-      ) continue;
+      const fullPath = path.join(tmpDir, entry);
+      let stat: fs.Stats;
+      try { stat = fs.statSync(fullPath); } catch { continue; }
 
-      try {
-        fs.rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
-      } catch { /* ignore individual failures */ }
+      if (stat.isDirectory()) {
+        // Preserve Chromium sub-directories (rare but possible)
+        if (chromiumDirs.has(entry)) continue;
+        // Preserve .local-chromium used by older chromium-min versions
+        if (entry.startsWith("chromium") || entry.startsWith(".local-chromium")) continue;
+        // Delete all other dirs: Remotion frame dirs, Chrome profile dirs, etc.
+        try { fs.rmSync(fullPath, { recursive: true, force: true }); } catch { /* ignore */ }
+      } else {
+        // Only delete orphaned render MP4 output files; leave all other
+        // files (Chromium's libnspr4.so etc.) untouched.
+        if (entry.startsWith("render-") && entry.endsWith(".mp4")) {
+          try { fs.unlinkSync(fullPath); } catch { /* ignore */ }
+        }
+      }
     }
   } catch { /* ignore */ }
 }
