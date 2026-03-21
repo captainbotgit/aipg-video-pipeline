@@ -37,7 +37,8 @@ const nextConfig: NextConfig = {
     ],
     "/api/ffmpeg/process": [
       "./node_modules/ffmpeg-static/**",
-      "./node_modules/ffprobe-static/**",
+      // ffprobe-static is NOT included here — /api/ffmpeg/process does not use ffprobe,
+      // and ffprobe-static/** would pull in all 343MB of platform binaries.
       "./node_modules/fluent-ffmpeg/**",
     ],
   },
