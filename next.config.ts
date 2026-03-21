@@ -27,8 +27,10 @@ const nextConfig: NextConfig = {
   // to a top-level outputFileTracingIncludes key.
   outputFileTracingIncludes: {
     "/api/render": [
-      // GNU compositor binary + .so libs — all traced via serverExternalPackages above.
-      // Listed here as belt-and-suspenders for NFT; the whole package is already included.
+      // GNU compositor: binary + all .so shared libs (libavcodec.so etc.).
+      // The 'remotion' binary uses $ORIGIN RPATH — it needs its .so files in
+      // the same directory. We copy them all to /tmp at cold start (route.ts).
+      "./node_modules/@remotion/compositor-linux-x64-gnu/**",
       "./node_modules/@remotion/renderer/**",
       "./node_modules/remotion/**",
       "./node_modules/@remotion/bundler/**",
