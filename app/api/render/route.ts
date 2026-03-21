@@ -56,6 +56,50 @@ function getChromiumExecutable(): Promise<string> {
   return chromiumExecutablePromise;
 }
 
+// ─── Chromium Self-Healing ────────────────────────────────────────────────────
+//
+// @sparticuz/chromium-min extracts the Chrome binary AND companion shared
+// libraries (libnspr4.so, libnss3.so, libX11.so, …) FLAT into /tmp.
+// Its executablePath() checks only whether /tmp/chromium (the binary) exists;
+// if it does it returns immediately WITHOUT verifying the .so files.
+//
+// Problem: our cleanupTmp() (now dir-only) preserves all files, but a previous
+// buggy deploy wiped the .so files. On warm containers the binary exists but
+// the .so files are gone → "libnspr4.so: cannot open shared object file".
+//
+// Fix: when any error matches known Chrome-launch failure patterns, wipe
+// /tmp/chromium (the binary) and reset the module-level promise. The NEXT
+// request will hit a null promise → call executablePath() → it sees no binary
+// → downloads and fully re-extracts the pack (binary + all .so libs).
+//
+// The current request still fails (Chrome is broken), but the next one heals.
+
+const CHROME_BROKEN_PATTERNS = [
+  "cannot open shared object file",
+  "Failed to launch the browser process",
+  "spawn chromium ENOENT",
+  "No usable sandbox",
+  "error while loading shared libraries",
+];
+
+function isBrokenChromiumError(message: string): boolean {
+  return CHROME_BROKEN_PATTERNS.some((p) => message.includes(p));
+}
+
+function invalidateChromiumCache(): void {
+  chromiumExecutablePromise = null;
+  // Delete the binary so executablePath() re-extracts the full pack next time.
+  // Companion .so files in /tmp are NOT deleted here — if the binary is absent
+  // executablePath() re-extracts everything, overwriting stale .so files too.
+  const binaryPath = path.join(os.tmpdir(), "chromium");
+  try {
+    if (fs.existsSync(binaryPath)) {
+      fs.unlinkSync(binaryPath);
+      console.log("[render] Invalidated Chromium cache — will re-extract on next request");
+    }
+  } catch { /* ignore */ }
+}
+
 // Vercel Fluid Compute — allow up to 5 minutes for renders
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -264,34 +308,11 @@ export async function POST(req: NextRequest) {
     browserExecutable = await getChromiumExecutable();
     const binariesDirectory = getGnuBinariesDir();
 
-    // Log /tmp layout so we can understand what Chromium extracts and what
-    // render artifacts accumulate between warm-container invocations.
-    try {
-      const tmpDir = os.tmpdir();
-      const entries = fs.readdirSync(tmpDir).map((e) => {
-        try {
-          const s = fs.statSync(path.join(tmpDir, e));
-          return `${s.isDirectory() ? "D" : "F"} ${e}`;
-        } catch { return `? ${e}`; }
-      });
-      console.log(`[render] /tmp contents before cleanup (${entries.length} entries):\n  ${entries.join("\n  ")}`);
-      console.log(`[render] chromium executable: ${browserExecutable}`);
-    } catch { /* ignore */ }
+    console.log(`[render] chromium executable: ${browserExecutable}`);
 
     // Pre-render cleanup — delete Remotion render artifact directories and
     // orphaned output MP4 files. Chromium's extracted files are preserved.
     cleanupTmp(tmpPath, browserExecutable);
-
-    try {
-      const tmpDir = os.tmpdir();
-      const entries = fs.readdirSync(tmpDir).map((e) => {
-        try {
-          const s = fs.statSync(path.join(tmpDir, e));
-          return `${s.isDirectory() ? "D" : "F"} ${e}`;
-        } catch { return `? ${e}`; }
-      });
-      console.log(`[render] /tmp contents after cleanup (${entries.length} entries):\n  ${entries.join("\n  ")}`);
-    } catch { /* ignore */ }
 
     // Select composition (validates compositionId + resolves duration)
     const compositionRaw = await selectComposition({
@@ -379,6 +400,14 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
+
+    // Self-heal broken Chromium installations (missing .so files).
+    // Deletes /tmp/chromium + resets the extraction promise so the NEXT request
+    // triggers a full re-download and extraction of the Chromium pack.
+    if (isBrokenChromiumError(error)) {
+      console.error(`[render] Broken Chromium detected — invalidating cache for next request. Error: ${error}`);
+      invalidateChromiumCache();
+    }
 
     // Clean up everything in /tmp (except Chromium) so retries have headroom.
     cleanupTmp(tmpPath, browserExecutable);
