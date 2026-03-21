@@ -29,17 +29,18 @@ const CHROMIUM_BINARY_URL =
 
 const CHROMIUM_OPTIONS = {
   disableWebSecurity: true,
-  // Single-process reduces per-tab overhead and prevents OOM on longer compositions
-  // (DentalExplainer = 60 s with multiple OffthreadVideo layers).
-  enableMultiProcessOnLinux: false,
+  // Multi-process Chrome: each renderer process has its own fresh V8 heap, which
+  // avoids accumulated GC pressure on long (60 s) DentalExplainer renders.
+  // Single-process packs everything into one heap that grows unbounded.
+  enableMultiProcessOnLinux: true,
   headless: true,
   chromiumFlags: [
-    // Don't write to /dev/shm (Vercel containers restrict this); use /tmp instead
+    // Use /tmp instead of /dev/shm (Vercel restricts /dev/shm size)
     "--disable-dev-shm-usage",
-    // Suppress GPU process overhead (headless renders don't need a GPU)
-    "--disable-gpu",
-    // Keep a lean renderer
-    "--no-zygote",
+    // Discard cached resources aggressively to free memory during long renders
+    "--aggressive-cache-discard",
+    // Reduce background timer throttling overhead
+    "--disable-background-timer-throttling",
   ],
 } as const;
 

@@ -3,7 +3,7 @@
   "installCommand": "bun install",
   "buildCommand": "bun run build",
   "functions": {
-    "app/api/render/route.ts": {
+    "api/render": {
       "memory": 3009,
       "maxDuration": 300
     }
