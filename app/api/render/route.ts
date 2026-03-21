@@ -367,6 +367,27 @@ export async function POST(req: NextRequest) {
     // orphaned output MP4 files. Chromium's extracted files are preserved.
     cleanupTmp(tmpPath, browserExecutable);
 
+    // Diagnostic: log /tmp entry sizes after cleanup so we know exactly how
+    // much space is available before the render starts.
+    try {
+      const tmpDir = os.tmpdir();
+      const entries = fs.readdirSync(tmpDir).map((entry) => {
+        const fullPath = path.join(tmpDir, entry);
+        try {
+          const result = require("child_process").execSync(
+            `du -sh "${fullPath}" 2>/dev/null || echo "0\t${fullPath}"`,
+            { encoding: "utf8", timeout: 5000 }
+          ).trim();
+          return result;
+        } catch { return `? ${entry}`; }
+      });
+      const dfResult = require("child_process").execSync(
+        "df -h /tmp 2>/dev/null | tail -1",
+        { encoding: "utf8", timeout: 3000 }
+      ).trim();
+      console.log(`[render] /tmp after cleanup:\n  ${entries.join("\n  ")}\n  df: ${dfResult}`);
+    } catch { /* ignore diag errors */ }
+
     // Select composition (validates compositionId + resolves duration)
     const compositionRaw = await selectComposition({
       serveUrl: bundleUrl,
