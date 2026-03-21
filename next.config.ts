@@ -9,9 +9,11 @@ const nextConfig: NextConfig = {
     "@remotion/compositor-linux-x64-musl",
     "@remotion/compositor-darwin-arm64",
     "@remotion/compositor-darwin-x64",
+    // ffmpeg-static is required by fluent-ffmpeg in /api/ffmpeg/process
     "ffmpeg-static",
-    "ffprobe-static",
     "fluent-ffmpeg",
+    // ffprobe-static is NOT listed here — we reference it by hardcoded path only.
+    // Listing it as serverExternal causes NFT to trace all 343MB of platform binaries.
   ],
   experimental: {
     serverMinification: false,
