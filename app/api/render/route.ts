@@ -102,57 +102,33 @@ async function prepareCombinedBinariesDir(): Promise<string | undefined> {
     path.join(cwd,      "node_modules/@remotion/compositor-linux-x64-gnu"),
   ].find(d => { try { return fs.existsSync(path.join(d, "remotion")); } catch { return false; } });
 
-  // ffmpeg-static — truly static Linux build (no GLIBC dependency)
-  const staticFfmpeg = findPkgBinary([
-    path.join(taskRoot, "node_modules/ffmpeg-static/ffmpeg"),
-    path.join(cwd,      "node_modules/ffmpeg-static/ffmpeg"),
-  ]);
-
-  // ffprobe-static — same
-  const staticFfprobe = findPkgBinary([
-    path.join(taskRoot, "node_modules/ffprobe-static/bin/linux/x64/ffprobe"),
-    path.join(cwd,      "node_modules/ffprobe-static/bin/linux/x64/ffprobe"),
-  ]);
-
   if (!patchedBinary) {
     console.warn("[render] Patched remotion binary not found — falling back to default");
     return undefined;
   }
   if (!gnuPkgDir) {
-    console.warn("[render] GNU compositor .so libs not found — falling back to default");
-    return undefined;
-  }
-  if (!staticFfmpeg || !staticFfprobe) {
-    console.warn("[render] Static ffmpeg/ffprobe not found — falling back to default");
+    console.warn("[render] GNU compositor package not found — falling back to default");
     return undefined;
   }
 
   fs.mkdirSync(COMBINED_BIN_DIR, { recursive: true });
 
   // Copy patched remotion binary to /tmp.
+  // (GNU build with GLIBC_2.35 hypot requirement patched to GLIBC_2.17)
   fs.copyFileSync(patchedBinary, path.join(COMBINED_BIN_DIR, "remotion"));
   fs.chmodSync(path.join(COMBINED_BIN_DIR, "remotion"), 0o755);
 
-  // Copy GNU compositor .so shared libraries to /tmp alongside the binary.
-  // $ORIGIN RPATH resolves relative to the binary location — all .so files
-  // must be in the same directory.
+  // Copy the GNU compositor's entire set of binaries + .so libs.
+  // We use the PACKAGE'S ffmpeg/ffprobe (not ffmpeg-static) because they are
+  // built by Remotion with libfdk_aac support — required for AAC audio encoding.
+  // ffmpeg-static lacks libfdk_aac and breaks audio for all compositions.
   for (const entry of fs.readdirSync(gnuPkgDir)) {
-    if (entry.endsWith(".so")) {
+    if (entry === "ffmpeg" || entry === "ffprobe" || entry.endsWith(".so")) {
       const src = path.join(gnuPkgDir, entry);
       const dst = path.join(COMBINED_BIN_DIR, entry);
       fs.copyFileSync(src, dst);
       fs.chmodSync(dst, 0o755);
     }
-  }
-
-  // Overwrite GNU ffmpeg/ffprobe with static builds (no GLIBC_2.35 requirement).
-  const copies: [string, string][] = [
-    [staticFfmpeg,  path.join(COMBINED_BIN_DIR, "ffmpeg")],
-    [staticFfprobe, path.join(COMBINED_BIN_DIR, "ffprobe")],
-  ];
-  for (const [src, dst] of copies) {
-    fs.copyFileSync(src, dst);
-    fs.chmodSync(dst, 0o755);
   }
 
   return COMBINED_BIN_DIR;
