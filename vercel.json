@@ -1,11 +1,5 @@
 {
   "framework": "nextjs",
   "installCommand": "bun install",
-  "buildCommand": "bun run build",
-  "functions": {
-    "api/render": {
-      "memory": 3009,
-      "maxDuration": 300
-    }
-  }
+  "buildCommand": "bun run build"
 }

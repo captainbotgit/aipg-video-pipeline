@@ -185,7 +185,14 @@ export async function POST(req: NextRequest) {
   const jobId = randomUUID();
   const startedAt = new Date().toISOString();
 
-  let body: { compositionId?: string; inputProps?: Record<string, unknown> };
+  let body: {
+    compositionId?: string;
+    inputProps?: Record<string, unknown>;
+    // Optional: cap the render at N frames (for testing long compositions on
+    // constrained infrastructure). Not passed to Remotion's composition — only
+    // used to override durationInFrames before handing to renderMedia.
+    overrideDurationInFrames?: number;
+  };
   try {
     body = await req.json();
   } catch {
@@ -195,7 +202,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { compositionId, inputProps = {} } = body;
+  const { compositionId, inputProps = {}, overrideDurationInFrames } = body;
 
   if (!compositionId) {
     return NextResponse.json(
@@ -230,13 +237,19 @@ export async function POST(req: NextRequest) {
     const binariesDirectory = getGnuBinariesDir();
 
     // Select composition (validates compositionId + resolves duration)
-    const composition = await selectComposition({
+    const compositionRaw = await selectComposition({
       serveUrl: bundleUrl,
       id: compositionId,
       inputProps,
       browserExecutable,
       chromiumOptions: CHROMIUM_OPTIONS,
     });
+
+    // Allow callers to cap duration (useful for testing long compositions on
+    // memory-constrained infrastructure without changing source code).
+    const composition = overrideDurationInFrames
+      ? { ...compositionRaw, durationInFrames: overrideDurationInFrames }
+      : compositionRaw;
 
     // Render to /tmp
     await renderMedia({
