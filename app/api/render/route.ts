@@ -474,7 +474,7 @@ export async function POST(req: NextRequest) {
 
   let body: {
     compositionId?: string;
-    inputProps?: Record<string, unknown>;
+    inputProps?: Record<string, unknown> | string; // string when n8n sends JSON.stringify(props)
     // Optional: cap the render at N frames (for testing long compositions on
     // constrained infrastructure). Not passed to Remotion's composition — only
     // used to override durationInFrames before handing to renderMedia.
@@ -489,7 +489,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { compositionId, inputProps = {}, overrideDurationInFrames } = body;
+  const { compositionId, overrideDurationInFrames } = body;
+
+  // Accept inputProps as either an object OR a JSON-encoded string (e.g. when
+  // n8n passes JSON.stringify(props) in a jsonBody template expression).
+  let inputProps: Record<string, unknown> = {};
+  if (typeof body.inputProps === "string") {
+    try { inputProps = JSON.parse(body.inputProps); } catch { inputProps = {}; }
+  } else if (body.inputProps && typeof body.inputProps === "object") {
+    inputProps = body.inputProps;
+  }
 
   if (!compositionId) {
     return NextResponse.json(
