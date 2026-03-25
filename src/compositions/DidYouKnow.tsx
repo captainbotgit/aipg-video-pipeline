@@ -51,11 +51,11 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
         />
       </Sequence>
 
-      {/* Bullets: 3-12s (frames 90-360), each bullet ~3s */}
+      {/* Bullets: 3-12s (frames 90-360), one at a time — 3s each, no overlap */}
       {bullets.slice(0, 3).map((bullet, i) => {
         const bulletStart = 90 + i * 90;
         return (
-          <Sequence key={i} from={bulletStart} durationInFrames={270 - i * 90}>
+          <Sequence key={i} from={bulletStart} durationInFrames={90}>
             <BulletPoint
               text={bullet}
               index={i}
@@ -162,6 +162,7 @@ const BulletPoint: React.FC<{
     <AbsoluteFill
       style={{
         justifyContent: "center",
+        alignItems: "center",
         paddingLeft: 80,
         paddingRight: 80,
       }}
@@ -170,10 +171,10 @@ const BulletPoint: React.FC<{
         style={{
           transform: `translateX(${x}px)`,
           opacity,
-          marginTop: index * 180 - 180,
           display: "flex",
           alignItems: "flex-start",
           gap: 24,
+          width: "100%",
         }}
       >
         <div
