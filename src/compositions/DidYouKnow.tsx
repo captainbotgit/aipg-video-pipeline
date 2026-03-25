@@ -1,13 +1,12 @@
 /**
- * DidYouKnow composition — migrated from aipg-video-templates
- * Adapted to use BrandKit (pipeline schema) instead of flat BrandProps.
+ * DidYouKnow — 1080×1920 portrait
+ * Duration: 30s (900 frames @ 30fps)
  *
- * Duration: 30s (900 frames @ 30fps) — 1080×1920 portrait
- * Layout zones:
- *   0–140px   : Logo (top-left)
- *   140–480px : Hook title area
- *   480–1480px: Bullet content zone (3 bullets, one at a time)
- *   1480–1920px: CTA zone
+ * Layout (pixel-precise, no flex centering traps):
+ *   y 0–140    : Logo (top-left, always visible)
+ *   y 200–700  : Hook zone  (frames 0–90)
+ *   y 500–1500 : Bullet zone (frames 90–360, one at a time)
+ *   y 1620–1820: CTA zone   (frames 750–900)
  */
 
 import React from "react";
@@ -23,7 +22,6 @@ import { BrandKit } from "../utils/brandKit";
 import { adaptBrandKit } from "../utils/brandAdapter";
 import { Background } from "../components/Background";
 import { Logo } from "../components/Logo";
-import { CTACard } from "../components/CTACard";
 
 export type DidYouKnowProps = {
   brandKit: BrandKit;
@@ -38,7 +36,10 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
 
   return (
     <AbsoluteFill>
-      <Background backgroundColor={brand.backgroundColor} videoUrl={brand.backgroundVideoUrl || undefined} />
+      <Background
+        backgroundColor={brand.backgroundColor}
+        videoUrl={brand.backgroundVideoUrl || undefined}
+      />
       <Logo
         logoText={brand.logoText}
         logoUrl={brand.logoUrl}
@@ -46,40 +47,35 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
         fontFamily={brand.fontFamily}
       />
 
-      {/* Hook text: 0–3s (frames 0–90) — upper third */}
+      {/* ── Hook: 0–3s ─────────────────────────────────────────────── */}
       <Sequence from={0} durationInFrames={90}>
-        <HookText
+        <HookSection
           text={hookText}
           accentColor={brand.accentColor}
           fontFamily={brand.fontFamily}
         />
       </Sequence>
 
-      {/* Bullets: 3–12s (frames 90–360) — one at a time, mid zone */}
-      {bullets.slice(0, 3).map((bullet, i) => {
-        const bulletStart = 90 + i * 90;
-        return (
-          <Sequence key={i} from={bulletStart} durationInFrames={90}>
-            <BulletPoint
-              text={bullet}
-              index={i}
-              total={Math.min(bullets.length, 3)}
-              primaryColor={brand.primaryColor}
-              accentColor={brand.accentColor}
-              textColor={brand.textColor}
-              fontFamily={brand.fontFamily}
-            />
-          </Sequence>
-        );
-      })}
+      {/* ── Bullets: 3–12s, one at a time ──────────────────────────── */}
+      {bullets.slice(0, 3).map((bullet, i) => (
+        <Sequence key={i} from={90 + i * 90} durationInFrames={90}>
+          <BulletSection
+            text={bullet}
+            number={i + 1}
+            total={Math.min(bullets.length, 3)}
+            primaryColor={brand.primaryColor}
+            accentColor={brand.accentColor}
+            textColor={brand.textColor}
+            fontFamily={brand.fontFamily}
+          />
+        </Sequence>
+      ))}
 
-      {/* CTA: 25–30s (frames 750–900) */}
+      {/* ── CTA: 25–30s ────────────────────────────────────────────── */}
       <Sequence from={750} durationInFrames={150}>
-        <CTACard
+        <CTASection
           text={ctaText}
-          startFrame={0}
           accentColor={brand.accentColor}
-          textColor={brand.textColor}
           fontFamily={brand.fontFamily}
         />
       </Sequence>
@@ -87,10 +83,9 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
   );
 };
 
-// ─── Hook Text ───────────────────────────────────────────────────────────────
-// Positioned at 22% from top — leaves logo room, anchors to upper third.
+// ─── Hook Section ────────────────────────────────────────────────────────────
 
-const HookText: React.FC<{
+const HookSection: React.FC<{
   text: string;
   accentColor: string;
   fontFamily: string;
@@ -98,142 +93,133 @@ const HookText: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const scale = spring({
-    frame,
-    fps,
-    config: { damping: 10, stiffness: 60 },
-  });
-  const opacity = interpolate(frame, [0, 12], [0, 1], {
+  const rise = spring({ frame, fps, config: { damping: 14, stiffness: 70 } });
+  const y = interpolate(rise, [0, 1], [40, 0]);
+  const opacity = interpolate(frame, [0, 15, 75, 90], [0, 1, 1, 0], {
     extrapolateRight: "clamp",
   });
 
   return (
-    <AbsoluteFill
-      style={{
-        alignItems: "center",
-        justifyContent: "flex-start",
-        paddingTop: 420,
-        paddingLeft: 60,
-        paddingRight: 60,
-      }}
-    >
-      {/* Eyebrow label */}
+    <AbsoluteFill style={{ opacity }}>
+      {/* Eyebrow */}
       <div
         style={{
+          position: "absolute",
+          top: 260,
+          left: 60,
+          right: 60,
           fontFamily,
-          fontWeight: 600,
-          fontSize: 36,
+          fontWeight: 700,
+          fontSize: 38,
           color: accentColor,
-          letterSpacing: 6,
+          letterSpacing: 8,
           textTransform: "uppercase" as const,
-          opacity,
-          marginBottom: 24,
+          transform: `translateY(${y}px)`,
         }}
       >
         Did You Know?
       </div>
 
-      {/* Main hook */}
+      {/* Accent bar */}
       <div
         style={{
+          position: "absolute",
+          top: 330,
+          left: 60,
+          width: 70,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: accentColor,
+          transform: `translateY(${y}px)`,
+        }}
+      />
+
+      {/* Main headline */}
+      <div
+        style={{
+          position: "absolute",
+          top: 380,
+          left: 60,
+          right: 60,
           fontFamily,
-          fontWeight: 800,
-          fontSize: 88,
+          fontWeight: 900,
+          fontSize: 96,
           color: "#FFFFFF",
-          textAlign: "center",
-          lineHeight: 1.15,
-          transform: `scale(${scale})`,
-          opacity,
+          lineHeight: 1.1,
+          transform: `translateY(${y}px)`,
         }}
       >
         {text}
       </div>
-
-      {/* Accent bar */}
-      <div
-        style={{
-          width: 80,
-          height: 5,
-          borderRadius: 3,
-          backgroundColor: accentColor,
-          marginTop: 32,
-          opacity,
-        }}
-      />
     </AbsoluteFill>
   );
 };
 
-// ─── Bullet Point ─────────────────────────────────────────────────────────────
-// Each bullet is a full-screen card anchored to the mid zone (paddingTop ~580).
-// Large number + text treatment — social-native feel.
+// ─── Bullet Section ───────────────────────────────────────────────────────────
 
-const BulletPoint: React.FC<{
+const BulletSection: React.FC<{
   text: string;
-  index: number;
+  number: number;
   total: number;
   primaryColor: string;
   accentColor: string;
   textColor: string;
   fontFamily: string;
-}> = ({ text, index, total, primaryColor, accentColor, textColor, fontFamily }) => {
+}> = ({ text, number, total, primaryColor, accentColor, textColor, fontFamily }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const slideIn = spring({
-    frame,
-    fps,
-    config: { damping: 14, stiffness: 90 },
-  });
-
-  const x = interpolate(slideIn, [0, 1], [120, 0]);
-  const opacity = interpolate(frame, [0, 12], [0, 1], {
-    extrapolateRight: "clamp",
-  });
-
-  // Fade out last 10 frames
-  const fadeOut = interpolate(frame, [80, 90], [1, 0], {
-    extrapolateLeft: "clamp",
+  const slide = spring({ frame, fps, config: { damping: 16, stiffness: 100 } });
+  const x = interpolate(slide, [0, 1], [80, 0]);
+  const opacity = interpolate(frame, [0, 12, 78, 90], [0, 1, 1, 0], {
     extrapolateRight: "clamp",
   });
 
   return (
-    <AbsoluteFill
-      style={{
-        justifyContent: "flex-start",
-        alignItems: "flex-start",
-        paddingTop: 560,
-        paddingLeft: 60,
-        paddingRight: 60,
-        opacity: opacity * fadeOut,
-        transform: `translateX(${x}px)`,
-      }}
-    >
-      {/* Step counter */}
+    <AbsoluteFill style={{ opacity, transform: `translateX(${x}px)` }}>
+      {/* Ghost number — visual depth */}
       <div
         style={{
+          position: "absolute",
+          top: 480,
+          left: 44,
           fontFamily,
           fontWeight: 900,
-          fontSize: 120,
+          fontSize: 260,
           color: accentColor,
           lineHeight: 1,
-          opacity: 0.18,
-          marginBottom: -20,
-          marginLeft: -8,
+          opacity: 0.08,
+          userSelect: "none" as const,
         }}
       >
-        {String(index + 1).padStart(2, "0")}
+        {String(number).padStart(2, "0")}
       </div>
+
+      {/* Accent bar */}
+      <div
+        style={{
+          position: "absolute",
+          top: 590,
+          left: 60,
+          width: 60,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: accentColor,
+        }}
+      />
 
       {/* Bullet text */}
       <div
         style={{
+          position: "absolute",
+          top: 640,
+          left: 60,
+          right: 60,
           fontFamily,
-          fontWeight: 700,
-          fontSize: 54,
+          fontWeight: 800,
+          fontSize: 72,
           color: textColor,
-          lineHeight: 1.35,
-          maxWidth: 900,
+          lineHeight: 1.25,
         }}
       >
         {text}
@@ -242,24 +228,73 @@ const BulletPoint: React.FC<{
       {/* Progress dots */}
       <div
         style={{
+          position: "absolute",
+          top: 1520,
+          left: 60,
           display: "flex",
-          gap: 12,
-          marginTop: 48,
+          gap: 14,
         }}
       >
         {Array.from({ length: total }).map((_, i) => (
           <div
             key={i}
             style={{
-              width: i === index ? 32 : 10,
-              height: 10,
-              borderRadius: 5,
-              backgroundColor: i === index ? accentColor : primaryColor,
-              opacity: i === index ? 1 : 0.3,
-              transition: "width 0.3s",
+              width: i === number - 1 ? 40 : 12,
+              height: 12,
+              borderRadius: 6,
+              backgroundColor: i === number - 1 ? accentColor : primaryColor,
+              opacity: i === number - 1 ? 1 : 0.3,
             }}
           />
         ))}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+// ─── CTA Section ─────────────────────────────────────────────────────────────
+
+const CTASection: React.FC<{
+  text: string;
+  accentColor: string;
+  fontFamily: string;
+}> = ({ text, accentColor, fontFamily }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const rise = spring({ frame, fps, config: { damping: 12, stiffness: 80 } });
+  const y = interpolate(rise, [0, 1], [60, 0]);
+  const opacity = interpolate(frame, [0, 15], [0, 1], {
+    extrapolateRight: "clamp",
+  });
+
+  return (
+    <AbsoluteFill style={{ opacity }}>
+      {/* Full-width CTA button pinned to bottom */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 120,
+          left: 60,
+          right: 60,
+          backgroundColor: accentColor,
+          borderRadius: 28,
+          padding: "52px 40px",
+          textAlign: "center",
+          transform: `translateY(${y}px)`,
+        }}
+      >
+        <div
+          style={{
+            fontFamily,
+            fontWeight: 900,
+            fontSize: 52,
+            color: "#0A0A0F",
+            lineHeight: 1.2,
+          }}
+        >
+          {text}
+        </div>
       </div>
     </AbsoluteFill>
   );
