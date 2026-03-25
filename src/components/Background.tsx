@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Video, OffthreadVideo } from "remotion";
+import { AbsoluteFill, Video } from "remotion";
 
 /**
  * Background component — supports solid color or looping video background.
@@ -20,7 +20,7 @@ export const Background: React.FC<{
     return (
       <AbsoluteFill style={{ backgroundColor }}>
         {/* Looping background video — muted, covers frame */}
-        <OffthreadVideo
+        <Video
           src={videoUrl}
           style={{
             width: "100%",

@@ -1504,7 +1504,7 @@ function adaptBrandKit(kit) {
 const Background = ({ backgroundColor, videoUrl, overlayOpacity = 0.55 }) => {
   if (videoUrl) {
     return /* @__PURE__ */ react.createElement(esm.AbsoluteFill, { style: { backgroundColor } }, /* @__PURE__ */ react.createElement(
-      esm.OffthreadVideo,
+      esm.Video,
       {
         src: videoUrl,
         style: {
