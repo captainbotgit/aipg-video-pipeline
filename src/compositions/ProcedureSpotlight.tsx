@@ -38,7 +38,7 @@ export const ProcedureSpotlight: React.FC<ProcedureSpotlightProps> = (
 
   return (
     <AbsoluteFill>
-      <Background backgroundColor={brand.backgroundColor} />
+      <Background backgroundColor={brand.backgroundColor} videoUrl={brand.backgroundVideoUrl || undefined} />
       <Logo
         logoText={brand.logoText}
         logoUrl={brand.logoUrl}

@@ -11,6 +11,7 @@ export interface FlatBrandProps {
   primaryColor: string;
   accentColor: string;
   backgroundColor: string;
+  backgroundVideoUrl: string;
   textColor: string;
   fontFamily: string;
   logoText: string;
@@ -22,6 +23,7 @@ export function adaptBrandKit(kit: BrandKit): FlatBrandProps {
     primaryColor: kit.primary_color,
     accentColor: kit.accent_color,
     backgroundColor: kit.background_color,
+    backgroundVideoUrl: kit.background_video_url ?? "",
     textColor: "#FFFFFF",
     fontFamily: kit.font_primary,
     logoText: kit.practice_name,

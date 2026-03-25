@@ -9,6 +9,7 @@ export const BrandKitSchema = z.object({
   font_primary: z.string().default("Clash Display"),
   font_secondary: z.string().default("Inter"),
   logo_url: z.string().optional(),
+  background_video_url: z.string().optional(), // Pexels or GCS video URL for looping background
   cta_text: z.string().default("Book Your Visit"),
   cta_url: z.string().optional(),
   voice_tone: z.array(z.string()).optional(),

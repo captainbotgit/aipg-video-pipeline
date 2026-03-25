@@ -1,0 +1,1 @@
+=== Launching ProcedureSpotlight render === curl -s -X POST https://aipg-video-pipeline.vercel.app/api/render -H Content-Type: application/json --data @/tmp/test_procedure_spotlight.json --max-time 360

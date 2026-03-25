@@ -2,8 +2,12 @@
  * DidYouKnow composition — migrated from aipg-video-templates
  * Adapted to use BrandKit (pipeline schema) instead of flat BrandProps.
  *
- * Duration: 30s (900 frames @ 30fps)
- * Sections: Hook (3s) → Bullets (9s) → Voiceover slot (13s) → CTA (5s)
+ * Duration: 30s (900 frames @ 30fps) — 1080×1920 portrait
+ * Layout zones:
+ *   0–140px   : Logo (top-left)
+ *   140–480px : Hook title area
+ *   480–1480px: Bullet content zone (3 bullets, one at a time)
+ *   1480–1920px: CTA zone
  */
 
 import React from "react";
@@ -34,7 +38,7 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
 
   return (
     <AbsoluteFill>
-      <Background backgroundColor={brand.backgroundColor} />
+      <Background backgroundColor={brand.backgroundColor} videoUrl={brand.backgroundVideoUrl || undefined} />
       <Logo
         logoText={brand.logoText}
         logoUrl={brand.logoUrl}
@@ -42,7 +46,7 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
         fontFamily={brand.fontFamily}
       />
 
-      {/* Hook text: 0-3s (frames 0-90) */}
+      {/* Hook text: 0–3s (frames 0–90) — upper third */}
       <Sequence from={0} durationInFrames={90}>
         <HookText
           text={hookText}
@@ -51,7 +55,7 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
         />
       </Sequence>
 
-      {/* Bullets: 3-12s (frames 90-360), one at a time — 3s each, no overlap */}
+      {/* Bullets: 3–12s (frames 90–360) — one at a time, mid zone */}
       {bullets.slice(0, 3).map((bullet, i) => {
         const bulletStart = 90 + i * 90;
         return (
@@ -59,7 +63,9 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
             <BulletPoint
               text={bullet}
               index={i}
+              total={Math.min(bullets.length, 3)}
               primaryColor={brand.primaryColor}
+              accentColor={brand.accentColor}
               textColor={brand.textColor}
               fontFamily={brand.fontFamily}
             />
@@ -67,23 +73,7 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
         );
       })}
 
-      {/* Voiceover slot: 12-25s (frames 360-750) */}
-      <Sequence from={360} durationInFrames={390}>
-        <AbsoluteFill
-          style={{
-            justifyContent: "flex-end",
-            alignItems: "center",
-            paddingBottom: 120,
-          }}
-        >
-          <VoiceoverIndicator
-            accentColor={brand.accentColor}
-            fontFamily={brand.fontFamily}
-          />
-        </AbsoluteFill>
-      </Sequence>
-
-      {/* CTA: 25-30s (frames 750-900) */}
+      {/* CTA: 25–30s (frames 750–900) */}
       <Sequence from={750} durationInFrames={150}>
         <CTACard
           text={ctaText}
@@ -97,6 +87,9 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
   );
 };
 
+// ─── Hook Text ───────────────────────────────────────────────────────────────
+// Positioned at 22% from top — leaves logo room, anchors to upper third.
+
 const HookText: React.FC<{
   text: string;
   accentColor: string;
@@ -105,138 +98,169 @@ const HookText: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const hookScale = spring({
+  const scale = spring({
     frame,
     fps,
     config: { damping: 10, stiffness: 60 },
   });
-  const hookOpacity = interpolate(frame, [0, 10], [0, 1], {
+  const opacity = interpolate(frame, [0, 12], [0, 1], {
     extrapolateRight: "clamp",
   });
 
   return (
     <AbsoluteFill
-      style={{ justifyContent: "center", alignItems: "center" }}
+      style={{
+        alignItems: "center",
+        justifyContent: "flex-start",
+        paddingTop: 420,
+        paddingLeft: 60,
+        paddingRight: 60,
+      }}
     >
+      {/* Eyebrow label */}
+      <div
+        style={{
+          fontFamily,
+          fontWeight: 600,
+          fontSize: 36,
+          color: accentColor,
+          letterSpacing: 6,
+          textTransform: "uppercase" as const,
+          opacity,
+          marginBottom: 24,
+        }}
+      >
+        Did You Know?
+      </div>
+
+      {/* Main hook */}
       <div
         style={{
           fontFamily,
           fontWeight: 800,
-          fontSize: 96,
-          color: accentColor,
-          transform: `scale(${hookScale})`,
-          opacity: hookOpacity,
+          fontSize: 88,
+          color: "#FFFFFF",
           textAlign: "center",
-          padding: "0 60px",
-          lineHeight: 1.2,
+          lineHeight: 1.15,
+          transform: `scale(${scale})`,
+          opacity,
         }}
       >
         {text}
       </div>
+
+      {/* Accent bar */}
+      <div
+        style={{
+          width: 80,
+          height: 5,
+          borderRadius: 3,
+          backgroundColor: accentColor,
+          marginTop: 32,
+          opacity,
+        }}
+      />
     </AbsoluteFill>
   );
 };
 
+// ─── Bullet Point ─────────────────────────────────────────────────────────────
+// Each bullet is a full-screen card anchored to the mid zone (paddingTop ~580).
+// Large number + text treatment — social-native feel.
+
 const BulletPoint: React.FC<{
   text: string;
   index: number;
+  total: number;
   primaryColor: string;
+  accentColor: string;
   textColor: string;
   fontFamily: string;
-}> = ({ text, index, primaryColor, textColor, fontFamily }) => {
+}> = ({ text, index, total, primaryColor, accentColor, textColor, fontFamily }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
   const slideIn = spring({
     frame,
     fps,
-    config: { damping: 14, stiffness: 80 },
+    config: { damping: 14, stiffness: 90 },
   });
 
-  const x = interpolate(slideIn, [0, 1], [600, 0]);
-  const opacity = interpolate(frame, [0, 15], [0, 1], {
+  const x = interpolate(slideIn, [0, 1], [120, 0]);
+  const opacity = interpolate(frame, [0, 12], [0, 1], {
+    extrapolateRight: "clamp",
+  });
+
+  // Fade out last 10 frames
+  const fadeOut = interpolate(frame, [80, 90], [1, 0], {
+    extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
   return (
     <AbsoluteFill
       style={{
-        justifyContent: "center",
-        alignItems: "center",
-        paddingLeft: 80,
-        paddingRight: 80,
+        justifyContent: "flex-start",
+        alignItems: "flex-start",
+        paddingTop: 560,
+        paddingLeft: 60,
+        paddingRight: 60,
+        opacity: opacity * fadeOut,
+        transform: `translateX(${x}px)`,
       }}
     >
-      <div
-        style={{
-          transform: `translateX(${x}px)`,
-          opacity,
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 24,
-          width: "100%",
-        }}
-      >
-        <div
-          style={{
-            width: 20,
-            height: 20,
-            borderRadius: 10,
-            backgroundColor: primaryColor,
-            marginTop: 20,
-            flexShrink: 0,
-          }}
-        />
-        <div
-          style={{
-            fontFamily,
-            fontWeight: 600,
-            fontSize: 48,
-            color: textColor,
-            lineHeight: 1.4,
-          }}
-        >
-          {text}
-        </div>
-      </div>
-    </AbsoluteFill>
-  );
-};
-
-const VoiceoverIndicator: React.FC<{
-  accentColor: string;
-  fontFamily: string;
-}> = ({ accentColor, fontFamily }) => {
-  const frame = useCurrentFrame();
-  const pulse = Math.sin(frame * 0.1) * 0.3 + 0.7;
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
-        opacity: pulse,
-      }}
-    >
-      <div
-        style={{
-          width: 16,
-          height: 16,
-          borderRadius: 8,
-          backgroundColor: accentColor,
-        }}
-      />
+      {/* Step counter */}
       <div
         style={{
           fontFamily,
-          fontSize: 24,
-          color: "#9CA3AF",
-          fontStyle: "italic",
+          fontWeight: 900,
+          fontSize: 120,
+          color: accentColor,
+          lineHeight: 1,
+          opacity: 0.18,
+          marginBottom: -20,
+          marginLeft: -8,
         }}
       >
-        Voiceover audio plays here
+        {String(index + 1).padStart(2, "0")}
       </div>
-    </div>
+
+      {/* Bullet text */}
+      <div
+        style={{
+          fontFamily,
+          fontWeight: 700,
+          fontSize: 54,
+          color: textColor,
+          lineHeight: 1.35,
+          maxWidth: 900,
+        }}
+      >
+        {text}
+      </div>
+
+      {/* Progress dots */}
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          marginTop: 48,
+        }}
+      >
+        {Array.from({ length: total }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              width: i === index ? 32 : 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: i === index ? accentColor : primaryColor,
+              opacity: i === index ? 1 : 0.3,
+              transition: "width 0.3s",
+            }}
+          />
+        ))}
+      </div>
+    </AbsoluteFill>
   );
 };
