@@ -1603,7 +1603,7 @@ const DidYouKnow = (props) => {
       textColor: brand.textColor,
       fontFamily: brand.fontFamily
     }
-  ))), /* @__PURE__ */ react.createElement(esm.Sequence, { from: 750, durationInFrames: 150 }, /* @__PURE__ */ react.createElement(
+  ))), /* @__PURE__ */ react.createElement(esm.Sequence, { from: 360, durationInFrames: 180 }, /* @__PURE__ */ react.createElement(
     CTASection,
     {
       text: ctaText,
@@ -1625,7 +1625,7 @@ const HookSection = ({ text, accentColor, fontFamily }) => {
     {
       style: {
         position: "absolute",
-        top: 260,
+        top: 640,
         left: 60,
         right: 60,
         fontFamily,
@@ -1643,7 +1643,7 @@ const HookSection = ({ text, accentColor, fontFamily }) => {
     {
       style: {
         position: "absolute",
-        top: 330,
+        top: 710,
         left: 60,
         width: 70,
         height: 6,
@@ -1657,7 +1657,7 @@ const HookSection = ({ text, accentColor, fontFamily }) => {
     {
       style: {
         position: "absolute",
-        top: 380,
+        top: 760,
         left: 60,
         right: 60,
         fontFamily,
@@ -1684,7 +1684,7 @@ const BulletSection = ({ text, number, total, primaryColor, accentColor, textCol
     {
       style: {
         position: "absolute",
-        top: 480,
+        top: 620,
         left: 44,
         fontFamily,
         fontWeight: 900,
@@ -1701,7 +1701,7 @@ const BulletSection = ({ text, number, total, primaryColor, accentColor, textCol
     {
       style: {
         position: "absolute",
-        top: 590,
+        top: 740,
         left: 60,
         width: 60,
         height: 6,
@@ -1714,7 +1714,7 @@ const BulletSection = ({ text, number, total, primaryColor, accentColor, textCol
     {
       style: {
         position: "absolute",
-        top: 640,
+        top: 800,
         left: 60,
         right: 60,
         fontFamily,
@@ -1730,7 +1730,7 @@ const BulletSection = ({ text, number, total, primaryColor, accentColor, textCol
     {
       style: {
         position: "absolute",
-        top: 1520,
+        top: 1680,
         left: 60,
         display: "flex",
         gap: 14
@@ -2947,7 +2947,7 @@ const RemotionRoot = () => {
       id: "DidYouKnow",
       component: DidYouKnow,
       schema: DidYouKnowSchema,
-      durationInFrames: 30 * FPS,
+      durationInFrames: 18 * FPS,
       fps: FPS,
       width: WIDTH,
       height: HEIGHT,

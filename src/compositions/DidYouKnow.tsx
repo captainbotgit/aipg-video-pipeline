@@ -1,12 +1,12 @@
 /**
  * DidYouKnow — 1080×1920 portrait
- * Duration: 30s (900 frames @ 30fps)
+ * Duration: 18s (540 frames @ 30fps)
  *
- * Layout (pixel-precise, no flex centering traps):
+ * Layout (pixel-precise, vertically centered):
  *   y 0–140    : Logo (top-left, always visible)
- *   y 200–700  : Hook zone  (frames 0–90)
- *   y 500–1500 : Bullet zone (frames 90–360, one at a time)
- *   y 1620–1820: CTA zone   (frames 750–900)
+ *   y 640–1100 : Hook zone  (frames 0–90)
+ *   y 640–1200 : Bullet zone (frames 90–360, one at a time)
+ *   bottom 120 : CTA zone   (frames 360–540)
  */
 
 import React from "react";
@@ -71,8 +71,8 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
         </Sequence>
       ))}
 
-      {/* ── CTA: 25–30s ────────────────────────────────────────────── */}
-      <Sequence from={750} durationInFrames={150}>
+      {/* ── CTA: 12–18s ────────────────────────────────────────────── */}
+      <Sequence from={360} durationInFrames={180}>
         <CTASection
           text={ctaText}
           accentColor={brand.accentColor}
@@ -105,7 +105,7 @@ const HookSection: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 260,
+          top: 640,
           left: 60,
           right: 60,
           fontFamily,
@@ -124,7 +124,7 @@ const HookSection: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 330,
+          top: 710,
           left: 60,
           width: 70,
           height: 6,
@@ -138,7 +138,7 @@ const HookSection: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 380,
+          top: 760,
           left: 60,
           right: 60,
           fontFamily,
@@ -181,7 +181,7 @@ const BulletSection: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 480,
+          top: 620,
           left: 44,
           fontFamily,
           fontWeight: 900,
@@ -199,7 +199,7 @@ const BulletSection: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 590,
+          top: 740,
           left: 60,
           width: 60,
           height: 6,
@@ -212,7 +212,7 @@ const BulletSection: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 640,
+          top: 800,
           left: 60,
           right: 60,
           fontFamily,
@@ -229,7 +229,7 @@ const BulletSection: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 1520,
+          top: 1680,
           left: 60,
           display: "flex",
           gap: 14,

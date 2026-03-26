@@ -158,7 +158,7 @@ export const RemotionRoot: React.FC = () => {
         id="DidYouKnow"
         component={DidYouKnow}
         schema={DidYouKnowSchema}
-        durationInFrames={30 * FPS}
+        durationInFrames={18 * FPS}
         fps={FPS}
         width={WIDTH}
         height={HEIGHT}
