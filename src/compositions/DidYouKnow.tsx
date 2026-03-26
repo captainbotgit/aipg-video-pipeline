@@ -75,7 +75,9 @@ export const DidYouKnow: React.FC<DidYouKnowProps> = (props) => {
       <Sequence from={360} durationInFrames={180}>
         <CTASection
           text={ctaText}
+          practiceName={brand.logoText}
           accentColor={brand.accentColor}
+          textColor={brand.textColor}
           fontFamily={brand.fontFamily}
         />
       </Sequence>
@@ -256,20 +258,70 @@ const BulletSection: React.FC<{
 
 const CTASection: React.FC<{
   text: string;
+  practiceName: string;
   accentColor: string;
+  textColor: string;
   fontFamily: string;
-}> = ({ text, accentColor, fontFamily }) => {
+}> = ({ text, practiceName, accentColor, textColor, fontFamily }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
   const rise = spring({ frame, fps, config: { damping: 12, stiffness: 80 } });
-  const y = interpolate(rise, [0, 1], [60, 0]);
+  const centerY = interpolate(rise, [0, 1], [40, 0]);
+  const btnY = interpolate(rise, [0, 1], [80, 0]);
   const opacity = interpolate(frame, [0, 15], [0, 1], {
     extrapolateRight: "clamp",
   });
 
   return (
     <AbsoluteFill style={{ opacity }}>
+      {/* Center callout — practice name + tagline */}
+      <div
+        style={{
+          position: "absolute",
+          top: 700,
+          left: 60,
+          right: 60,
+          textAlign: "center",
+          transform: `translateY(${centerY}px)`,
+        }}
+      >
+        {/* Accent bar above */}
+        <div
+          style={{
+            width: 80,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: accentColor,
+            margin: "0 auto 40px",
+          }}
+        />
+        <div
+          style={{
+            fontFamily,
+            fontWeight: 900,
+            fontSize: 88,
+            color: textColor,
+            lineHeight: 1.1,
+            marginBottom: 28,
+          }}
+        >
+          {practiceName}
+        </div>
+        <div
+          style={{
+            fontFamily,
+            fontWeight: 400,
+            fontSize: 44,
+            color: textColor,
+            opacity: 0.65,
+            lineHeight: 1.3,
+          }}
+        >
+          Your smile starts here.
+        </div>
+      </div>
+
       {/* Full-width CTA button pinned to bottom */}
       <div
         style={{
@@ -281,7 +333,7 @@ const CTASection: React.FC<{
           borderRadius: 28,
           padding: "52px 40px",
           textAlign: "center",
-          transform: `translateY(${y}px)`,
+          transform: `translateY(${btnY}px)`,
         }}
       >
         <div
