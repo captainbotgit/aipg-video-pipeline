@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 // Main onboarding submission handler
-// 1. Stores practice profile in DentalCMO Supabase
+// 1. Stores practice profile in AIPG Avatar Automation Supabase (separate from DentalCMO)
 // 2. Triggers n8n avatar training workflow (HeyGen photo avatar + polling)
 // Returns: { practiceId: string, workflowExecutionId: string }
 
-const DENTALCMO_SUPABASE_URL = "https://dhefgavxgpjkccraoskr.supabase.co";
+const AIPG_AVATAR_SUPABASE_URL = "https://eveauwkefwjtjbayhmbe.supabase.co";
 const N8N_ONBOARD_WEBHOOK = "https://allinengine.app.n8n.cloud/webhook/avatar-onboard";
 
 interface PracticeProfile {
@@ -42,12 +42,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Upsert practice into DentalCMO Supabase
-    const supabaseKey = process.env.DENTALCMO_SERVICE_KEY;
+    const supabaseKey = process.env.AIPG_AVATAR_SERVICE_KEY;
     if (!supabaseKey) {
-      return NextResponse.json({ error: "Missing DENTALCMO_SERVICE_KEY" }, { status: 500 });
+      return NextResponse.json({ error: "Missing AIPG_AVATAR_SERVICE_KEY" }, { status: 500 });
     }
 
-    const supabase = createClient(DENTALCMO_SUPABASE_URL, supabaseKey);
+    const supabase = createClient(AIPG_AVATAR_SUPABASE_URL, supabaseKey);
 
     const ctaText =
       profile.primaryCTA === "Custom" ? profile.customCTA : profile.primaryCTA;
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const { data: practice, error: dbError } = await supabase
       .from("practices")
       .insert({
-        name: profile.practiceName,
+        practice_name: profile.practiceName,
         doctor_name: profile.doctorName,
         city: profile.city,
         state: profile.state,
