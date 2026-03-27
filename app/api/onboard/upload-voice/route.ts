@@ -4,7 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 // Returns: { voiceId: string }
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch {
+      return NextResponse.json({ error: "No audio provided" }, { status: 400 });
+    }
     const audio = formData.get("audio") as File | null;
     const voiceName = (formData.get("name") as string) || "Doctor Voice Clone";
 

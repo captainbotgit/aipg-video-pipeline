@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const body: OnboardPayload = await req.json();
     const { profile, photoAssetIds, elevenlabsVoiceId } = body;
 
-    if (!profile.practiceName || !profile.doctorName) {
+    if (!profile || !profile.practiceName || !profile.doctorName) {
       return NextResponse.json({ error: "Missing required practice fields" }, { status: 400 });
     }
 

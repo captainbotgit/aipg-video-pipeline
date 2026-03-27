@@ -4,7 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 // Returns: { assetId: string }
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch {
+      return NextResponse.json({ error: "No photo provided" }, { status: 400 });
+    }
     const photo = formData.get("photo") as File | null;
 
     if (!photo) {
