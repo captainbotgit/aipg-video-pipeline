@@ -373,7 +373,13 @@ const BrandKitSchema = external.object({
   cta_url: external.string().optional(),
   voice_tone: external.array(external.string()).optional(),
   target_audience: external.string().optional(),
-  music_mood: external.string().optional()
+  music_mood: external.string().optional(),
+  heygen_avatar_id: external.string().optional(),
+  // HeyGen photo avatar ID (per client)
+  elevenlabs_voice_id: external.string().optional(),
+  // ElevenLabs cloned voice ID (per client)
+  heygen_training_status: external.string().optional()
+  // pending | complete | failed
 });
 const DEFAULT_BRAND_KIT = {
   practice_name: "AIPG Dental",
@@ -1493,7 +1499,9 @@ function adaptBrandKit(kit) {
     textColor: "#FFFFFF",
     fontFamily: kit.font_primary,
     logoText: kit.practice_name,
-    logoUrl: kit.logo_url ?? ""
+    logoUrl: kit.logo_url ?? "",
+    heygenAvatarId: kit.heygen_avatar_id ?? "",
+    elevenlabsVoiceId: kit.elevenlabs_voice_id ?? ""
   };
 }
 

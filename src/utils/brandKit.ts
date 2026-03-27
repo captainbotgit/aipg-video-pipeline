@@ -15,6 +15,9 @@ export const BrandKitSchema = z.object({
   voice_tone: z.array(z.string()).optional(),
   target_audience: z.string().optional(),
   music_mood: z.string().optional(),
+  heygen_avatar_id: z.string().optional(), // HeyGen photo avatar ID (per client)
+  elevenlabs_voice_id: z.string().optional(), // ElevenLabs cloned voice ID (per client)
+  heygen_training_status: z.string().optional(), // pending | complete | failed
 });
 
 export type BrandKit = z.infer<typeof BrandKitSchema>;

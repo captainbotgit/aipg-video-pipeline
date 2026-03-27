@@ -16,6 +16,8 @@ export interface FlatBrandProps {
   fontFamily: string;
   logoText: string;
   logoUrl: string;
+  heygenAvatarId: string;
+  elevenlabsVoiceId: string;
 }
 
 export function adaptBrandKit(kit: BrandKit): FlatBrandProps {
@@ -28,5 +30,7 @@ export function adaptBrandKit(kit: BrandKit): FlatBrandProps {
     fontFamily: kit.font_primary,
     logoText: kit.practice_name,
     logoUrl: kit.logo_url ?? "",
+    heygenAvatarId: kit.heygen_avatar_id ?? "",
+    elevenlabsVoiceId: kit.elevenlabs_voice_id ?? "",
   };
 }
