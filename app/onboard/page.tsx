@@ -689,7 +689,9 @@ export default function OnboardPage() {
     profile.specialty &&
     profile.services.length > 0;
 
-  const step2Valid = photos.filter((p) => p.status === "done").length >= 1;
+  // Allow proceeding if at least 1 photo added (done OR error — errors can be retried via n8n)
+  const photosUploading = photos.some((p) => p.status === "uploading");
+  const step2Valid = photos.length >= 1 && !photosUploading;
 
   const step3Valid =
     voice.uploadStatus === "done" || voice.audioBlob !== undefined;
@@ -1040,6 +1042,26 @@ export default function OnboardPage() {
                           ? "✕"
                           : "○"}
                       </div>
+                      {photo.status === "error" && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: 4,
+                            left: 4,
+                            right: 4,
+                            background: "rgba(255,68,68,0.9)",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            color: "#fff",
+                            textAlign: "center",
+                            padding: "2px 4px",
+                            cursor: "pointer",
+                          }}
+                          onClick={() => uploadPhotoToHeyGen(photo.file, idx)}
+                        >
+                          Retry ↺
+                        </div>
+                      )}
                       <div
                         style={{
                           position: "absolute",
@@ -1065,6 +1087,20 @@ export default function OnboardPage() {
                 </div>
               )}
             </div>
+
+            {photos.some((p) => p.status === "error") && photos.some((p) => p.status !== "done") && (
+              <div style={{
+                background: "rgba(255,180,0,0.12)",
+                border: "1px solid rgba(255,180,0,0.4)",
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 12,
+                color: "#ffb400",
+                marginBottom: 12,
+              }}>
+                ⚠️ Some photos failed to upload. Click <strong>Retry ↺</strong> on each red photo, or continue — failed uploads will be re-attempted during avatar training.
+              </div>
+            )}
 
             <div style={s.btnRow}>
               <button style={s.btnSecondary} onClick={() => setStep(1)}>
@@ -1255,10 +1291,17 @@ export default function OnboardPage() {
                   <span style={{ fontSize: 24 }}>🖼️</span>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 600 }}>
-                      {photos.filter(p => p.status === "done").length} photos uploaded
+                      {photos.filter(p => p.status === "done").length} of {photos.length} photos uploaded
+                      {photos.filter(p => p.status === "error").length > 0 && (
+                        <span style={{ color: "#ffb400", fontSize: 12, marginLeft: 6 }}>
+                          ({photos.filter(p => p.status === "error").length} failed)
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: "#666" }}>
-                      {photos.filter(p => p.status === "done").length < 3
+                      {photos.filter(p => p.status === "done").length < 1
+                        ? "⚠️ No photos uploaded — avatar training will be skipped"
+                        : photos.filter(p => p.status === "done").length < 3
                         ? "⚠️ Recommend 3+ for best avatar quality"
                         : "✓ Good to go"}
                     </div>
