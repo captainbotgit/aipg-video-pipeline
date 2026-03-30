@@ -489,6 +489,7 @@ export default function OnboardPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied" | "prompt">("unknown");
+  const [recordingError, setRecordingError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -586,18 +587,22 @@ export default function OnboardPage() {
   // ── Voice recording ──
 
   const startRecording = async () => {
+    setRecordingError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setMicPermission("granted");
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/mp4";
-      const recorder = new MediaRecorder(stream, { mimeType });
+
+      // Let the browser choose the best format — no mimeType forced
+      const recorder = new MediaRecorder(stream);
+      const actualMimeType = recorder.mimeType || "audio/webm";
+
       audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-      recorder.onstop = async () => {
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const blob = new Blob(audioChunksRef.current, { type: actualMimeType });
         const url = URL.createObjectURL(blob);
         setVoice({ audioBlob: blob, audioUrl: url, uploadStatus: "idle" });
       };
@@ -610,10 +615,16 @@ export default function OnboardPage() {
         1000
       );
     } catch (err) {
+      console.error("startRecording error:", err);
       const isDenied =
         err instanceof DOMException &&
         (err.name === "NotAllowedError" || err.name === "PermissionDeniedError");
       setMicPermission(isDenied ? "denied" : "unknown");
+      setRecordingError(
+        isDenied
+          ? "Microphone access is blocked — click the 🔒 lock icon in your address bar, set Microphone to Allow, then refresh."
+          : `Could not start recording: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   };
 
@@ -1234,6 +1245,21 @@ export default function OnboardPage() {
                   onChange={handleVoiceFileChange}
                 />
               </div>
+
+              {recordingError && (
+                <div style={{
+                  background: "#2a1010",
+                  border: "1px solid #ff4444",
+                  borderRadius: 10,
+                  padding: "12px 16px",
+                  marginBottom: 16,
+                  fontSize: 13,
+                  color: "#ffaaaa",
+                  lineHeight: 1.6,
+                }}>
+                  ⚠️ {recordingError}
+                </div>
+              )}
 
               {voice.audioUrl && (
                 <div>
