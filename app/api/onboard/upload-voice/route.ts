@@ -39,8 +39,12 @@ export async function POST(req: NextRequest) {
 
     if (!elRes.ok) {
       const err = await elRes.text();
-      console.error("ElevenLabs IVC error:", err);
-      return NextResponse.json({ error: "ElevenLabs clone failed", details: err }, { status: 502 });
+      console.error("ElevenLabs IVC error:", elRes.status, err);
+      return NextResponse.json({
+        error: "ElevenLabs clone failed",
+        elevenlabs_status: elRes.status,
+        details: err,
+      }, { status: 502 });
     }
 
     const result = await elRes.json();
