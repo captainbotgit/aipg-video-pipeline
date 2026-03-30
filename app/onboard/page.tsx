@@ -616,15 +616,15 @@ export default function OnboardPage() {
       );
     } catch (err) {
       console.error("startRecording error:", err);
-      const isDenied =
-        err instanceof DOMException &&
-        (err.name === "NotAllowedError" || err.name === "PermissionDeniedError");
-      setMicPermission(isDenied ? "denied" : "unknown");
-      setRecordingError(
-        isDenied
-          ? "Microphone access is blocked — click the 🔒 lock icon in your address bar, set Microphone to Allow, then refresh."
-          : `Could not start recording: ${err instanceof Error ? err.message : String(err)}`
-      );
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setMicPermission("denied");
+        setRecordingError("DENIED");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setRecordingError("NOTFOUND");
+      } else {
+        setRecordingError(`Could not start recording: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   };
 
@@ -1214,39 +1214,49 @@ export default function OnboardPage() {
                 </div>
               )}
 
-              {/* Record or upload */}
-              <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-                <button
-                  style={s.recordBtn(isRecording)}
-                  onClick={isRecording ? stopRecording : startRecording}
-                >
-                  <span style={s.recordDot(isRecording)} />
-                  {isRecording
-                    ? `Recording… ${formatTime(recordingSeconds)}`
-                    : voice.audioBlob
-                    ? "Re-record"
-                    : "Record Now"}
-                </button>
+              {/* NotFound error — no mic device detected */}
+              {recordingError === "NOTFOUND" && (
+                <div style={{
+                  background: "#1a1500",
+                  border: "1px solid #ffaa00",
+                  borderRadius: 10,
+                  padding: "14px 18px",
+                  marginBottom: 16,
+                  fontSize: 14,
+                  color: "#ffd980",
+                  lineHeight: 1.8,
+                }}>
+                  <strong style={{ color: "#ffcc44" }}>🎙️ No microphone detected on this device.</strong>
+                  <br />
+                  <strong>Option 1 — Mac fix:</strong> Apple menu → System Settings → Privacy &amp; Security → Microphone → enable Chrome, then refresh.<br />
+                  <strong>Option 2 — Record on your phone:</strong> Open the link below on your phone, complete Step 3 there, then continue here on desktop.<br />
+                  <span style={{ fontFamily: "monospace", fontSize: 12, color: "#fff", background: "#333", padding: "2px 8px", borderRadius: 4 }}>
+                    https://aipg-video-pipeline.vercel.app/onboard
+                  </span><br />
+                  <strong>Option 3 — Upload a file:</strong> Record a voice memo on your phone, AirDrop it to your Mac, then click Upload Audio File below.
+                </div>
+              )}
 
-                <button
-                  style={{
-                    ...s.recordBtn(false),
-                    background: "#1a1a1a",
-                  }}
-                  onClick={() => voiceInputRef.current?.click()}
-                >
-                  📁 Upload Audio File
-                </button>
-                <input
-                  ref={voiceInputRef}
-                  type="file"
-                  accept="audio/*"
-                  style={{ display: "none" }}
-                  onChange={handleVoiceFileChange}
-                />
-              </div>
+              {/* Denied error */}
+              {recordingError === "DENIED" && (
+                <div style={{
+                  background: "#2a1010",
+                  border: "1px solid #ff4444",
+                  borderRadius: 10,
+                  padding: "14px 18px",
+                  marginBottom: 16,
+                  fontSize: 14,
+                  color: "#ffaaaa",
+                  lineHeight: 1.6,
+                }}>
+                  <strong style={{ color: "#ff6666" }}>🎙️ Microphone access is blocked.</strong>
+                  <br />
+                  Click the <strong>🔒 lock icon</strong> in your address bar → <strong>Microphone</strong> → <strong>Allow</strong> → refresh the page.
+                </div>
+              )}
 
-              {recordingError && (
+              {/* Other errors */}
+              {recordingError && recordingError !== "NOTFOUND" && recordingError !== "DENIED" && (
                 <div style={{
                   background: "#2a1010",
                   border: "1px solid #ff4444",
@@ -1260,6 +1270,42 @@ export default function OnboardPage() {
                   ⚠️ {recordingError}
                 </div>
               )}
+
+              {/* Record or upload — equal weight buttons */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+                <button
+                  style={s.recordBtn(isRecording)}
+                  onClick={isRecording ? stopRecording : startRecording}
+                >
+                  <span style={s.recordDot(isRecording)} />
+                  {isRecording
+                    ? `Recording… ${formatTime(recordingSeconds)}`
+                    : voice.audioBlob
+                    ? "🔄 Re-record"
+                    : "🎙️ Record Now"}
+                </button>
+
+                <button
+                  style={{
+                    ...s.recordBtn(false),
+                    background: "#111",
+                    border: "1px solid #333",
+                  }}
+                  onClick={() => voiceInputRef.current?.click()}
+                >
+                  📁 Upload Audio File
+                </button>
+                <input
+                  ref={voiceInputRef}
+                  type="file"
+                  accept="audio/*"
+                  style={{ display: "none" }}
+                  onChange={handleVoiceFileChange}
+                />
+              </div>
+              <div style={{ fontSize: 12, color: "#555", marginBottom: 16, textAlign: "center" }}>
+                No mic on this computer? Record a voice memo on your phone and upload it here.
+              </div>
 
               {voice.audioUrl && (
                 <div>
