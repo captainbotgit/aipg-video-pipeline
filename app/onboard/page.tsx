@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -488,10 +488,25 @@ export default function OnboardPage() {
   const [voice, setVoice] = useState<VoiceCapture>({ uploadStatus: "idle" });
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied" | "prompt">("unknown");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const voiceInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Check mic permission whenever step 3 becomes active ──
+  useEffect(() => {
+    if (step !== 3) return;
+    if (!navigator?.permissions) return;
+    navigator.permissions
+      .query({ name: "microphone" as PermissionName })
+      .then((result) => {
+        setMicPermission(result.state as "granted" | "denied" | "prompt");
+        result.onchange = () =>
+          setMicPermission(result.state as "granted" | "denied" | "prompt");
+      })
+      .catch(() => setMicPermission("unknown"));
+  }, [step]);
 
   // ── Profile helpers ──
 
@@ -573,12 +588,16 @@ export default function OnboardPage() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      setMicPermission("granted");
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/mp4";
+      const recorder = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
       recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
         const url = URL.createObjectURL(blob);
         setVoice({ audioBlob: blob, audioUrl: url, uploadStatus: "idle" });
       };
@@ -590,8 +609,11 @@ export default function OnboardPage() {
         () => setRecordingSeconds((s) => s + 1),
         1000
       );
-    } catch {
-      alert("Microphone access denied. Please allow microphone access and try again.");
+    } catch (err) {
+      const isDenied =
+        err instanceof DOMException &&
+        (err.name === "NotAllowedError" || err.name === "PermissionDeniedError");
+      setMicPermission(isDenied ? "denied" : "unknown");
     }
   };
 
@@ -1146,6 +1168,40 @@ export default function OnboardPage() {
                 <label style={s.label}>Script to read aloud</label>
                 <div style={s.scriptBox}>{VOICE_SCRIPT}</div>
               </div>
+
+              {/* Mic permission banner */}
+              {micPermission === "denied" && (
+                <div style={{
+                  background: "#2a1010",
+                  border: "1px solid #ff4444",
+                  borderRadius: 10,
+                  padding: "14px 18px",
+                  marginBottom: 16,
+                  fontSize: 14,
+                  color: "#ffaaaa",
+                  lineHeight: 1.6,
+                }}>
+                  <strong style={{ color: "#ff6666" }}>🎙️ Microphone access is blocked.</strong>
+                  <br />
+                  Click the <strong>🔒 lock icon</strong> in your browser's address bar → <strong>Microphone</strong> → set to <strong>Allow</strong> → then refresh this page.
+                </div>
+              )}
+              {micPermission === "prompt" && (
+                <div style={{
+                  background: "#1a1a2e",
+                  border: "1px solid #02FEEF",
+                  borderRadius: 10,
+                  padding: "14px 18px",
+                  marginBottom: 16,
+                  fontSize: 14,
+                  color: "#aad4d4",
+                  lineHeight: 1.6,
+                }}>
+                  <strong style={{ color: "#02FEEF" }}>🎙️ Microphone access needed.</strong>
+                  <br />
+                  Click <strong>Record Now</strong> and approve the mic permission prompt that appears at the top of your browser.
+                </div>
+              )}
 
               {/* Record or upload */}
               <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
