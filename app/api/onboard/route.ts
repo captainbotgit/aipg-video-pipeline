@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
             doctorName: profile.doctorName,
             photoAssetIds,
             elevenlabsVoiceId,
-            notifyEmail: "blake@aipg.com",
+            notifyEmail: "blake@allinpracticegrowth.com",
           }),
         });
 
