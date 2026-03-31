@@ -645,13 +645,18 @@ export default function OnboardPage() {
     if (!voice.audioBlob) return;
     setVoice((v) => ({ ...v, uploadStatus: "uploading" }));
     try {
+      const t = voice.audioBlob.type || "";
+      const ext = t.includes("webm") ? "webm"
+        : t.includes("mp4") || t.includes("m4a") ? "m4a"
+        : t.includes("wav") ? "wav"
+        : t.includes("ogg") ? "ogg"
+        : "mp3";
+      const mimeType = t || "audio/mpeg";
       const formData = new FormData();
       formData.append(
         "audio",
-        voice.audioBlob,
-        `${profile.doctorName || "doctor"}-voice.${
-          voice.audioBlob.type.includes("webm") ? "webm" : "mp3"
-        }`
+        new Blob([voice.audioBlob], { type: mimeType }),
+        `${(profile.doctorName || "doctor").replace(/\s+/g, "-")}-voice.${ext}`
       );
       formData.append("name", `${profile.doctorName} - ${profile.practiceName}`);
       const res = await fetch("/api/onboard/upload-voice", {
@@ -666,12 +671,18 @@ export default function OnboardPage() {
           uploadStatus: "done",
         }));
       } else {
-        throw new Error(data.error || "Voice upload failed");
+        const details = data.elevenlabs_status ? ` (ElevenLabs ${data.elevenlabs_status})` : "";
+        throw new Error((data.error || "Voice upload failed") + details);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Voice clone error:", err);
       setVoice((v) => ({ ...v, uploadStatus: "error" }));
     }
+  };
+
+  const skipVoiceClone = () => {
+    // Allow proceeding with stock voice — ElevenLabs clone is optional
+    setVoice((v) => ({ ...v, uploadStatus: "done", elevenlabsVoiceId: undefined }));
   };
 
   const formatTime = (s: number) =>
@@ -1327,14 +1338,32 @@ export default function OnboardPage() {
                       ⏳ Cloning voice with ElevenLabs…
                     </div>
                   )}
-                  {voice.uploadStatus === "done" && (
+                  {voice.uploadStatus === "done" && voice.elevenlabsVoiceId && (
                     <div style={{ marginTop: 12, color: "#02FEEF", fontSize: 14 }}>
-                      ✅ Voice clone created — Voice ID: {voice.elevenlabsVoiceId}
+                      ✅ Voice clone created — custom voice will be used for all videos.
+                    </div>
+                  )}
+                  {voice.uploadStatus === "done" && !voice.elevenlabsVoiceId && (
+                    <div style={{ marginTop: 12, color: "#aaa", fontSize: 14 }}>
+                      ✅ Audio saved — stock voice will be used. You can re-clone later.
                     </div>
                   )}
                   {voice.uploadStatus === "error" && (
-                    <div style={{ marginTop: 12, color: "#ff4444", fontSize: 14 }}>
-                      ✕ Clone failed. Try again or skip to use a stock voice.
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ color: "#ff6666", fontSize: 14, marginBottom: 10 }}>
+                        ✕ Voice clone failed. Retry with a cleaner recording, or skip to use a stock voice now and clone later.
+                      </div>
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <button style={s.btnPrimary} onClick={uploadVoiceToElevenLabs}>
+                          Retry Clone
+                        </button>
+                        <button
+                          style={{ ...s.btnSecondary, background: "#1a1a1a", border: "1px solid #444" }}
+                          onClick={skipVoiceClone}
+                        >
+                          Skip — Use Stock Voice →
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
