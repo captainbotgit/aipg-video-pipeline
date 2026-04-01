@@ -494,6 +494,8 @@ export default function OnboardPage() {
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const voiceInputRef = useRef<HTMLInputElement>(null);
+  // Tracks uploaded HeyGen asset IDs in a ref so they survive React batching/closure issues
+  const uploadedAssetIds = useRef<string[]>([]);
 
   // ── Check mic permission whenever step 3 becomes active ──
   useEffect(() => {
@@ -537,6 +539,10 @@ export default function OnboardPage() {
       });
       const data = await res.json();
       if (data.assetId) {
+        // Track in ref (immune to React batching/stale closure issues)
+        if (!uploadedAssetIds.current.includes(data.assetId)) {
+          uploadedAssetIds.current = [...uploadedAssetIds.current, data.assetId];
+        }
         setPhotos((prev) =>
           prev.map((p, i) =>
             i === idx
@@ -693,9 +699,10 @@ export default function OnboardPage() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const photoAssetIds = photos
-        .filter((p) => p.heygenAssetId)
-        .map((p) => p.heygenAssetId!);
+      // Use ref as primary source — captures IDs even if React state hasn't flushed yet
+      const photoAssetIds = uploadedAssetIds.current.length > 0
+        ? uploadedAssetIds.current
+        : photos.filter((p) => p.heygenAssetId).map((p) => p.heygenAssetId!);
 
       const payload = {
         profile,
